@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+npm --prefix backend test
+npm --prefix frontend test

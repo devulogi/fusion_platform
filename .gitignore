@@ -1,0 +1,15 @@
+# Root Husky/lint-staged dependencies
+/node_modules/
+
+# Root environment files
+/.env
+/.env.*
+!/.env.example
+
+# Root logs and OS metadata
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Devcontainer lock file
+devcontainer-lock.json

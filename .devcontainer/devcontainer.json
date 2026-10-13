@@ -1,0 +1,56 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/typescript-node
+{
+    "name": "Fusion Platform",
+    // Use Docker Compose for the workspace and app services.
+    "dockerComposeFile": "../docker-compose.yml",
+    "service": "workspace",
+    "workspaceFolder": "/workspaces/fusion_platform",
+    "runServices": [
+        "workspace",
+        "postgres",
+        "backend",
+        "frontend"
+    ],
+    // Features to add to the dev container. More info: https://containers.dev/features.
+    "features": {
+        "ghcr.io/itsmechlark/features/postgresql:1": {},
+        "ghcr.io/devcontainers-extra/features/prisma:2": {
+            "version": "latest"
+        }
+    },
+    // Use 'forwardPorts' to make a list of ports inside the container available locally.
+    // "forwardPorts": [],
+    // Use 'postCreateCommand' to run commands after the container is created.
+    "postCreateCommand": "bash .devcontainer/shell/setup.sh",
+    // Configure tool-specific properties.
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "editor.tabSize": 4,
+                "editor.wordWrap": "on",
+                "editor.tabCompletion": "on",
+                "editor.formatOnSave": true
+            },
+            "extensions": [
+                "burkeholland.simple-react-snippets", // react simple snippet
+                "dbaeumer.vscode-eslint", // eslint
+                "esbenp.prettier-vscode", // prettier
+                "ms-ossdata.vscode-pgsql", // postgres
+                "github.vscode-pull-request-github", // pull requests
+                "usernamehw.errorlens", // error lens
+                "streetsidesoftware.code-spell-checker", // spell checker
+                "ms-azuretools.vscode-docker", // docker
+                "bradlc.vscode-tailwindcss", // tailwindcss
+                "donjayamanne.githistory", // git history
+                "vitest.explorer" // vitest test explorer
+            ]
+        }
+    },
+    // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+    "remoteUser": "node",
+    // Mount github ssh
+    "mounts": [
+        "source=${localEnv:HOME}/.ssh,target=/home/node/.ssh,type=bind,readonly"
+    ]
+}

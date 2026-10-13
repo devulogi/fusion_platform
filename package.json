@@ -1,0 +1,27 @@
+{
+    "name": "fusion-platform",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "prepare": "husky",
+        "test": "npm --prefix backend test && npm --prefix frontend test",
+        "lint": "npm --prefix backend run lint && npm --prefix frontend run lint",
+        "format:check": "npm --prefix backend run format:check && npm --prefix frontend run format:check"
+    },
+    "devDependencies": {
+        "husky": "^9.1.7",
+        "lint-staged": "^16.2.7"
+    },
+    "lint-staged": {
+        "backend/**/*.{ts,tsx}": [
+            "./backend/node_modules/.bin/eslint --fix",
+            "./backend/node_modules/.bin/prettier --write"
+        ],
+        "backend/**/*.{js,json,css,html,md,yml,yaml}": "./backend/node_modules/.bin/prettier --write",
+        "frontend/**/*.{ts,tsx}": [
+            "./frontend/node_modules/.bin/eslint --fix",
+            "./frontend/node_modules/.bin/prettier --write"
+        ],
+        "frontend/**/*.{js,json,css,html,md,yml,yaml}": "./frontend/node_modules/.bin/prettier --write"
+    }
+}
