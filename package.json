@@ -4,7 +4,8 @@
     "private": true,
     "scripts": {
         "prepare": "husky",
-        "test": "npm --prefix backend test && npm --prefix frontend test",
+        "test": "npm run test:all",
+        "test:all": "npm --prefix backend test && npm --prefix frontend test",
         "lint": "npm --prefix backend run lint && npm --prefix frontend run lint",
         "format:check": "npm --prefix backend run format:check && npm --prefix frontend run format:check"
     },

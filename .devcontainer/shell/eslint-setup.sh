@@ -7,6 +7,12 @@ for project in backend frontend; do
     project_root="$repo_root/$project"
     cd "$project_root"
 
+    if [[ -f "$project_root/eslint.config.js" ]]; then
+      echo "Preserving existing ESLint configuration for $project."
+      npm pkg set 'scripts.lint=eslint .' 'scripts.lint:fix=eslint . --fix'
+      continue
+    fi
+
     if [[ "$project" == "frontend" ]]; then
         cat > "$project_root/eslint.config.js" <<'EOF'
 import js from '@eslint/js';
@@ -59,7 +65,7 @@ export default tseslint.config(
     languageOptions: {
       globals: globals.node,
       parserOptions: {
-        projectService: { allowDefaultProject: ['src/*.test.ts'] },
+        projectService: { allowDefaultProject: ['src/*.test.ts', 'src/seed/*.test.ts'] },
       },
     },
   },

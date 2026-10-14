@@ -14,7 +14,7 @@ You focus on backend test design and implementation. Read the relevant story and
 - Do not change production behavior unless explicitly asked; report production defects separately.
 - Do not add flaky timing tests or require a running external database unless the test is intentionally an integration test and the project provides a reproducible setup.
 - Keep test doubles strict-TypeScript-safe: use explicit fixture contracts and typed `vi.fn<Contract['method']>()` mocks; avoid `any`, unsafe matcher values in assignments, unbound method references, and async mocks without `await`.
-- Tests are excluded from the backend TypeScript build but checked by type-aware ESLint. Before adding tests under a new nested directory, confirm `eslint.config.js` includes that path in `projectService.allowDefaultProject`.
+- Tests are excluded from the backend TypeScript build but checked by type-aware ESLint. `projectService.allowDefaultProject` uses explicit, non-recursive globs: ensure the glob for each test directory exists in `eslint.config.js` in the same change (currently `src/*.test.ts` and `src/seed/*.test.ts`); a top-level pattern does not cover nested tests.
 
 ## Workflow
 
@@ -22,6 +22,6 @@ You focus on backend test design and implementation. Read the relevant story and
 2. Cover the happy path and the highest-risk failure paths, including validation, missing records, persistence failure, and event ordering where relevant.
 3. For startup hydration, test that readiness follows successful hydration and that failure does not expose a partial collection.
 4. For SSE, test payloads, cleanup on disconnect, and recovery expectations without assuming durable delivery.
-5. Run the narrow test file and `npm --prefix backend run lint` immediately; then run the full backend test suite when practical.
+5. Run the narrow test file and `npm --prefix backend run lint` immediately; then run the full backend test suite when practical. Treat lint as blocking, fix every reported error without disabling rules, and rerun it after the final edit. If Prisma types show as `any`, generate the client with `npm --prefix backend run db:generate` and rerun lint rather than adding casts or suppressions.
 
 Report tests added, behavior covered, commands run, and any gaps. Keep fixtures small and representative of the assessment dataset.

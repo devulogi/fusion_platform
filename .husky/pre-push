@@ -1,3 +1,54 @@
 #!/usr/bin/env sh
-npm --prefix backend test
-npm --prefix frontend test
+set -eu
+
+remote_name=${1:-origin}
+zero_sha=0000000000000000000000000000000000000000
+
+changed_files=$(
+	while read -r local_ref local_sha remote_ref remote_sha; do
+		if [ -z "$local_sha" ] || [ "$local_sha" = "$zero_sha" ]; then
+			continue
+		fi
+
+		if [ "$remote_sha" = "$zero_sha" ]; then
+			git rev-list "$local_sha" --not --remotes="$remote_name" |
+				while read -r commit; do
+					git diff-tree --root --no-commit-id --name-only -r "$commit"
+				done
+		else
+			git diff --name-only "$remote_sha" "$local_sha"
+		fi
+	done
+)
+
+if [ -z "$changed_files" ]; then
+	echo "No changed files in pushed commits; skipping tests."
+	exit 0
+fi
+
+run_backend=false
+run_frontend=false
+
+if printf '%s\n' "$changed_files" | grep -qvE '^(backend|frontend)/'; then
+	run_backend=true
+	run_frontend=true
+else
+	if printf '%s\n' "$changed_files" | grep -q '^backend/'; then
+		run_backend=true
+	fi
+	if printf '%s\n' "$changed_files" | grep -q '^frontend/'; then
+		run_frontend=true
+	fi
+fi
+
+if [ "$run_backend" = true ]; then
+	npm --prefix backend test
+else
+	echo "No backend changes in pushed commits; skipping backend tests."
+fi
+
+if [ "$run_frontend" = true ]; then
+	npm --prefix frontend test
+else
+	echo "No frontend changes in pushed commits; skipping frontend tests."
+fi
