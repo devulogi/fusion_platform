@@ -1,0 +1,5 @@
+FROM postgres:16-alpine
+
+COPY migrations/ /database-migrations/
+COPY scripts/ /database-scripts/
+COPY seed/trades.sql /database-seed/trades.sql

@@ -3,7 +3,7 @@ import { TradeCache } from './features/trades/trade-cache.ts';
 import { healthController } from './features/health/controllers/health-controller.ts';
 import { createTradeController } from './features/trades/controllers/trade-controller.ts';
 import { TradeService } from './features/trades/services/trade-service.ts';
-import apiDocsRouter from './infrastructure/openapi/api-docs.ts';
+import apiDocsRouter from './api-docs.ts';
 
 export const tradeCache = new TradeCache();
 

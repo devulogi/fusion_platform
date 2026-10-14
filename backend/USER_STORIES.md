@@ -1,6 +1,6 @@
 # Backend User Stories
 
-**Status:** Partially implemented. Story 1's trade schema and optional startup seeding are implemented; the other stories remain proposed.
+**Status:** Partially implemented. Story 1's trade schema and optional setup-time SQL seeding are implemented; the other stories remain proposed.
 
 These stories translate the take-home requirements into backend behavior. Endpoint paths and business rules below are proposals to confirm during implementation, not claims about the current API.
 
@@ -27,7 +27,7 @@ As a reviewer, I want realistic sample trades when starting with an empty databa
 - Restarting the service does not duplicate seed data.
 - Seed failures are visible in startup logs and do not leave a partially cached collection.
 
-**Implementation:** The development Compose configuration opts in with `SEED_TRADES=true` and `SEED_TRADES_COUNT=500`. Seeding can be disabled with `SEED_TRADES=false`; configured counts must be between 100 and 1,000. Startup seeds only an empty table in a database transaction, before the API begins listening. The Prisma schema and initial SQL migration define the required trade fields and optional `book` and `counterparty` sample fields.
+**Implementation:** The development Compose database service opts in with `SEED_TRADES=true` and `SEED_TRADES_COUNT=500`. Seeding can be disabled with `SEED_TRADES=false`; configured counts must be between 100 and 1,000. The Dev Container setup invokes the database-owned SQL seeder before starting the API. Backend startup only connects to PostgreSQL and hydrates the cache. The Prisma schema and SQL migration define the required trade fields and optional `book` and `counterparty` sample fields.
 
 ### 2. View the trade collection
 

@@ -6,13 +6,13 @@ A small full-stack trading platform take-home project. The repository is organiz
 
 - `frontend/`: React 18, TypeScript, Vite, Tailwind CSS, TanStack Table, React Hook Form, and Zod.
 - `backend/`: Express 4 and TypeScript, with Vitest and Supertest for testing.
-- `postgres`: PostgreSQL 16 for local development. The trade schema and optional seed data use Prisma.
+- `database/`: PostgreSQL 16 development image, versioned SQL migrations, idempotent migration/seed shell scripts, and the randomized SQL trade dataset.
 - `workspace`: Node 24 development container used by VS Code.
 - `docker-compose.yml`: starts the workspace, database, backend, and frontend services.
 
 The backend currently listens on port `4001`; the frontend's Vite server is published on host port `3001`; PostgreSQL is published on port `5432`.
 
-Compose loads development-only service settings from `backend/.env.dev` and `frontend/.env.dev`. The backend connects to PostgreSQL by its Compose service name; frontend API requests use the Vite `/api` proxy to reach the backend. The frontend does not connect directly to PostgreSQL.
+Compose loads backend connection settings from `backend/.env.dev` and frontend settings from `frontend/.env.dev`. The `database` service owns the `SEED_TRADES` and `SEED_TRADES_COUNT` settings. The backend connects to PostgreSQL by its Compose service name; frontend API requests use the Vite `/api` proxy to reach the backend. The frontend does not connect directly to PostgreSQL.
 
 ## Architecture Decisions and Trade-offs
 
@@ -37,7 +37,7 @@ Compose loads development-only service settings from `backend/.env.dev` and `fro
 - `TradeCache` owns an in-process `Map<TradeId, Trade>` used to serve the full collection after initial hydration.
 - A typed event publisher emits `trade.created`, `trade.amended`, and `trade.cancelled` after persistence and cache updates. The SSE gateway subscribes and broadcasts the changed trade to connected clients.
 
-**Startup and read flow:** Before accepting application traffic, the backend connects to PostgreSQL, optionally seeds an empty database, loads the persisted trades into the Map, and then reports itself ready. `GET /api/trades` returns `Array.from(cache.values())`; it does not perform a database load on the first request. If startup hydration fails, the service must not report ready or serve an empty cache as complete. The client sorts and filters locally; the API does not add pagination by assumption.
+**Startup and read flow:** `setup.sh` applies SQL migrations and optionally seeds an empty database before starting the backend. The backend connects to PostgreSQL and loads persisted trades into the Map. `GET /api/trades` returns `Array.from(cache.values())`; it does not perform a database load on the first request. If startup hydration fails, the service must not report ready or serve an empty cache as complete. The client sorts and filters locally; the API does not add pagination by assumption.
 
 **Mutation flow:** The controller validates the request; the service applies domain rules; the repository commits to PostgreSQL and returns the saved trade; the service then updates the Map synchronously and publishes the corresponding event. A persistence failure must leave the cache unchanged and publish no event. SSE delivery failures must not turn an already-committed HTTP mutation into a failure.
 
@@ -67,15 +67,17 @@ For the VS Code option:
 
 ## Run With Docker Compose
 
-From the repository root, run:
+From the repository root, run the setup script:
 
 ```sh
-docker compose up --build
+bash .devcontainer/shell/setup.sh
 ```
 
-This builds and starts the development containers. The backend waits for PostgreSQL to become healthy, and the frontend waits for the backend health check.
+Setup installs dependencies, starts the database, runs `database/scripts/migrate.sh` and `database/scripts/seed.sh` inside the PostgreSQL container, generates the Prisma client, and only then starts the backend and frontend. The backend does not apply migrations or seed data on startup.
 
-The backend applies checked-in Prisma migrations before starting. In development, `SEED_TRADES=true` seeds an empty database with 500 trades; set `SEED_TRADES=false` to disable it. `SEED_TRADES_COUNT` can be set from 100 to 1,000.
+Running `docker compose up` by itself does not run migrations or seed data, and may start the backend before the database schema exists. Use the setup script as the entry point. If you already ran `docker compose up`, run `bash .devcontainer/shell/setup.sh`; it stops the app services, applies database setup, then starts them again.
+
+In development, `SEED_TRADES=true` seeds an empty table with 500 trades; set `SEED_TRADES=false` to disable it. `SEED_TRADES_COUNT` can be set from 100 to 1,000. The SQL migration ledger makes setup repeatable, and the seed script skips a non-empty table.
 
 - Frontend: <http://localhost:3001>
 - Backend health check: <http://localhost:4001/health>
@@ -88,7 +90,7 @@ To stop the stack, press `Ctrl+C` or run `docker compose down` from another term
 To view service logs:
 
 ```sh
-docker compose logs --follow postgres backend frontend
+docker compose logs --follow database backend frontend
 ```
 
 ## Run In VS Code Dev Containers
@@ -97,9 +99,7 @@ docker compose logs --follow postgres backend frontend
 2. Install the Dev Containers extension if needed.
 3. Run **Dev Containers: Reopen in Container** from the Command Palette.
 
-VS Code uses the Compose configuration in `.devcontainer/devcontainer.json`, attaches to the `workspace` service, and starts the application and database services. The post-create setup installs package dependencies and configures the repository tooling.
-
-After dependency installation, setup generates Prisma types and runs `npm --prefix backend run db:verify-seed`. This runs the seeder unit tests plus an opt-in, read-only PostgreSQL check: it waits up to 60 seconds for backend startup and confirms that persisted trades exist, printing their count. Existing data is never reset or required to match the configured seed count. Disabled seeding prints a skip message; a failed verification fails setup. Normal unit test runs skip the live database check. This verifies database population, not cache hydration, which remains unimplemented.
+VS Code uses the Compose configuration in `.devcontainer/devcontainer.json`, attaches to `workspace`, and initially starts only `workspace` and `database`. The setup script applies migrations and seeds before starting the backend and frontend. On subsequent starts, its database-only mode runs the idempotent database scripts before starting the apps.
 
 The same application URLs and local database settings listed above apply. Docker is required for this option as well.
 

@@ -4,13 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --env-file=.env.dev ./node_modules/prisma/build/index.js generate && node --env-file=.env.dev ./node_modules/prisma/build/index.js migrate deploy && node --env-file=.env.dev ./node_modules/tsx/dist/cli.mjs watch src/server.ts",
+    "dev": "node --env-file=.env.dev ./node_modules/prisma/build/index.js generate && node --env-file=.env.dev ./node_modules/tsx/dist/cli.mjs watch src/server.ts",
     "build": "prisma generate && tsc",
     "start": "node dist/server.js",
-    "db:migrate:dev": "node --env-file=.env.dev ./node_modules/prisma/build/index.js migrate dev",
-    "db:migrate:deploy": "node --env-file=.env.dev ./node_modules/prisma/build/index.js migrate deploy",
     "db:generate": "prisma generate",
-    "db:verify-seed": "VERIFY_DATABASE_SEED=true vitest run tests/infrastructure/prisma/seed/trade-seeder.test.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --write .",
@@ -21,7 +18,6 @@
   "dependencies": {
     "@prisma/client": "^5.20.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "swagger-ui-express": "^5.0.1",
     "ws": "^8.18.0",
