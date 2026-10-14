@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readSeedConfig } from './seed-config.js';
+import { readSeedConfig } from '../../../../src/infrastructure/prisma/seed/seed-config.ts';
 
 describe('readSeedConfig', () => {
   it('disables seeding unless explicitly enabled', () => {

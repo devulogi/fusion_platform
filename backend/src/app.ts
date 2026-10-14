@@ -1,11 +1,20 @@
 import express from 'express';
+import { TradeCache } from './features/trades/trade-cache.ts';
+import { healthController } from './features/health/controllers/health-controller.ts';
+import { createTradeController } from './features/trades/controllers/trade-controller.ts';
+import { TradeService } from './features/trades/services/trade-service.ts';
 
-const app = express();
+export const tradeCache = new TradeCache();
 
-app.use(express.json());
+export function createApp(cache: TradeCache = tradeCache): express.Express {
+  const app = express();
+  const tradeController = createTradeController(new TradeService(cache));
 
-app.get('/health', (_request, response) => {
-  response.json({ status: 'ok' });
-});
+  app.use(express.json());
+  app.get('/health', healthController);
+  app.get('/api/trades', tradeController.getAll);
 
-export default app;
+  return app;
+}
+
+export default createApp();

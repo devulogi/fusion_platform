@@ -16,6 +16,8 @@ These stories translate the take-home requirements into backend behavior. Endpoi
 
 ### 1. Seed an empty database
 
+**Status:** Implemented
+
 As a reviewer, I want realistic sample trades when starting with an empty database so I can evaluate the blotter quickly.
 
 **Acceptance criteria**
@@ -28,6 +30,8 @@ As a reviewer, I want realistic sample trades when starting with an empty databa
 **Implementation:** The development Compose configuration opts in with `SEED_TRADES=true` and `SEED_TRADES_COUNT=500`. Seeding can be disabled with `SEED_TRADES=false`; configured counts must be between 100 and 1,000. Startup seeds only an empty table in a database transaction, before the API begins listening. The Prisma schema and initial SQL migration define the required trade fields and optional `book` and `counterparty` sample fields.
 
 ### 2. View the trade collection
+
+**Status:** In-Progress
 
 As a blotter user, I want to retrieve the current trades so the frontend can display, sort, and filter them.
 

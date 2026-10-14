@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { TradeSeedDatabase, TradeSeedTransaction } from './trade-seeder.js';
-import { seedTrades } from './trade-seeder.js';
+import type {
+  TradeSeedDatabase,
+  TradeSeedTransaction,
+} from '../../../../src/infrastructure/prisma/seed/trade-seeder.ts';
+import { seedTrades } from '../../../../src/infrastructure/prisma/seed/trade-seeder.ts';
 
 function createDatabase(existingCount: number) {
   const count = vi.fn<TradeSeedTransaction['trade']['count']>().mockResolvedValue(existingCount);
@@ -69,7 +72,8 @@ describe.runIf(process.env.VERIFY_DATABASE_SEED === 'true')(
     it('confirms startup completed and PostgreSQL contains trades', async () => {
       const { config } = await import('dotenv');
       config({ path: '.env.dev' });
-      const { readSeedConfig } = await import('./seed-config.js');
+      const { readSeedConfig } =
+        await import('../../../../src/infrastructure/prisma/seed/seed-config.ts');
 
       if (!readSeedConfig().enabled) {
         console.info('Database seed verification skipped: SEED_TRADES is disabled.');

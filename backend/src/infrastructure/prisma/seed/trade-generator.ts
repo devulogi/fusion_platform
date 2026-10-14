@@ -1,4 +1,4 @@
-import type { Trade, TradeSide, TradeStatus } from '../domain/trade.js';
+import type { Trade, TradeSide, TradeStatus } from '../../../features/trades/models/trade.ts';
 
 const symbols = ['AAPL', 'MSFT', 'TSLA', 'NVDA', 'AMZN', 'GOOGL', 'META', 'JPM', 'BP', 'VOD'];
 const traders = ['JSMITH', 'ABROWN', 'MJONES', 'RLEE', 'SKHAN', 'TNGUYEN'];
