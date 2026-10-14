@@ -30,6 +30,12 @@ applyTo: "backend/**"
 - Keep business rules and use-case coordination in services, and PostgreSQL queries, transactions, and persistence mapping in repositories. Do not put domain rules in models, serializers, controllers, or cache infrastructure.
 - Return stable, intentional HTTP errors for validation, missing records, and conflicts. Never expose stack traces, secrets, or raw database details to clients.
 
+## HTTP API Documentation
+
+- Every change that adds or changes an HTTP API endpoint must update `backend/openapi.yaml` in the same change. Document the implemented method and path, parameters, request and response schemas, validation/error responses, and relevant status codes.
+- Keep the OpenAPI document limited to implemented behavior; do not describe proposed or planned routes as available.
+- An OpenAPI file is not a browsable documentation endpoint. When Swagger UI is part of the approved scope, serve it from the backend at `/api-docs` on the existing API port and keep it synchronized with the specification. Do not claim Swagger UI is available unless the route is mounted and tested.
+
 ## Persistence, cache, and events
 
 - PostgreSQL is the system of record. The in-process `Map` is disposable and only valid within one backend process.

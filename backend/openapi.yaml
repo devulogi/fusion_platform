@@ -3,6 +3,21 @@ info:
   title: Fusion Platform Backend API
   version: 1.0.0
 paths:
+  /health:
+    get:
+      summary: Check backend liveness
+      responses:
+        '200':
+          description: Backend process is running
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
   /api/trades:
     get:
       summary: List all trades

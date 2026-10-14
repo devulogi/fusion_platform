@@ -18,7 +18,7 @@ Use for an approved backend story involving collection reads, trade creation, am
 3. Trace request handling through controller, service, repository, cache, and event publisher as needed.
 4. Validate untrusted input with Zod at the boundary. Put use-case and trade rules in the service; keep database operations in the repository.
 5. For writes, commit to PostgreSQL, update cache from the canonical saved record, then publish the typed event. Do not change cache or emit on failed persistence.
-6. Document using openapi specifications for the implemented endpoints.
+6. Update `backend/openapi.yaml` in the same change for every implemented or changed HTTP endpoint. Document method/path, parameters, request and response schemas, validation/error responses, and relevant status codes; never list planned routes as implemented. If Swagger UI is in scope, serve and test it at `/api-docs` on the existing backend port; the specification file alone is not a browsable UI.
 7. Add tests for acceptance criteria and important error paths. Keep client-side sorting/filtering and full collection reads unless approved requirements change.
 8. Run the focused tests, `npm --prefix backend run lint`, and `npm --prefix backend run build` as appropriate.
 
