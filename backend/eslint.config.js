@@ -11,10 +11,39 @@ export default tseslint.config(
   })),
   {
     files: ['**/*.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ImportDeclaration[source.value=/^\\.{1,2}\\/.*\\.js$/]',
+          message: 'Use .ts extensions in relative TypeScript imports.',
+        },
+        {
+          selector: 'ExportNamedDeclaration[source.value=/^\\.{1,2}\\/.*\\.js$/]',
+          message: 'Use .ts extensions in relative TypeScript imports.',
+        },
+        {
+          selector: 'ExportAllDeclaration[source.value=/^\\.{1,2}\\/.*\\.js$/]',
+          message: 'Use .ts extensions in relative TypeScript imports.',
+        },
+        {
+          selector: 'ImportExpression[source.value=/^\\.{1,2}\\/.*\\.js$/]',
+          message: 'Use .ts extensions in relative TypeScript imports.',
+        },
+      ],
+    },
     languageOptions: {
       globals: globals.node,
       parserOptions: {
-        projectService: { allowDefaultProject: ['src/*.test.ts', 'src/seed/*.test.ts'] },
+        projectService: {
+          allowDefaultProject: [
+            'tests/features/health/api/*.test.ts',
+            'tests/features/trades/api/*.test.ts',
+            'tests/features/trades/repositories/*.test.ts',
+            'tests/features/trades/services/*.test.ts',
+            'tests/infrastructure/prisma/seed/*.test.ts',
+          ],
+        },
       },
     },
   },
