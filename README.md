@@ -83,7 +83,14 @@ In development, `SEED_TRADES=true` seeds an empty table with 500 trades; set `SE
 - Backend health check: <http://localhost:4001/health>
 - PostgreSQL: `localhost:5432`
 
-Local database settings are `postgres` / `postgrespassword`, database `fusion_platform`. These credentials are for local development only.
+| Setting        | Value              |
+| -------------- | ------------------ |
+| DB Server name | `database`         |
+| Port           | `5432`             |
+| Username       | `postgres`         |
+| Password       | `postgrespassword` |
+| Database       | `fusion_platform`  |
+| SSL            | `disable`          |
 
 To stop the stack, press `Ctrl+C` or run `docker compose down` from another terminal. The `postgres_data` volume preserves database files. To remove the volume and its data as well, run `docker compose down --volumes`.
 

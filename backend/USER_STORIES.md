@@ -24,8 +24,8 @@ As a reviewer, I want realistic sample trades when starting with an empty databa
 
 - Seeding is optional and runs only when no trades exist.
 - The generated dataset is within the agreed assessment scale (approximately 100–1,000 records) and uses valid symbols, sides, quantities, prices, traders, timestamps, and statuses.
-- Restarting the service does not duplicate seed data.
-- Seed failures are visible in startup logs and do not leave a partially cached collection.
+- Rerunning database setup does not duplicate seed data.
+- Seed failures are visible in setup output and prevent the backend from starting with an incomplete database.
 
 **Implementation:** The development Compose database service opts in with `SEED_TRADES=true` and `SEED_TRADES_COUNT=500`. Seeding can be disabled with `SEED_TRADES=false`; configured counts must be between 100 and 1,000. The Dev Container setup invokes the database-owned SQL seeder before starting the API. Backend startup only connects to PostgreSQL and hydrates the cache. The Prisma schema and SQL migration define the required trade fields and optional `book` and `counterparty` sample fields.
 
