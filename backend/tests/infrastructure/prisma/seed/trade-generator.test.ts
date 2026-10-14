@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateTrades } from './trade-generator.js';
+import { generateTrades } from '../../../../src/infrastructure/prisma/seed/trade-generator.ts';
 
 describe('generateTrades', () => {
   it('generates a realistic dataset that matches the assessment contract', () => {

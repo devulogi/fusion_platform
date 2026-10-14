@@ -10,7 +10,7 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",
-    "db:verify-seed": "VERIFY_DATABASE_SEED=true vitest run src/seed/trade-seeder.test.ts",
+    "db:verify-seed": "VERIFY_DATABASE_SEED=true vitest run tests/infrastructure/prisma/seed/trade-seeder.test.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --write .",

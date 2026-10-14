@@ -1,6 +1,6 @@
-import type { Trade } from '../domain/trade.js';
-import { generateTrades } from './trade-generator.js';
-import type { SeedConfig } from './seed-config.js';
+import type { Trade } from '../../../features/trades/models/trade.ts';
+import { generateTrades } from './trade-generator.ts';
+import type { SeedConfig } from './seed-config.ts';
 
 type PersistedTradeSeed = Omit<Trade, 'tradeDate'> & { tradeDate: Date };
 
