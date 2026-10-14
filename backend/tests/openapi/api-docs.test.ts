@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
-import app from '../../../src/app.ts';
+import app from '../../src/app.ts';
 
 describe('API documentation', () => {
   it('serves Swagger UI from the backend', async () => {

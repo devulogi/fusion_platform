@@ -8,9 +8,7 @@
     "workspaceFolder": "/workspaces/fusion_platform",
     "runServices": [
         "workspace",
-        "postgres",
-        "backend",
-        "frontend"
+        "database"
     ],
     // Features to add to the dev container. More info: https://containers.dev/features.
     "features": {
@@ -26,6 +24,7 @@
     // "forwardPorts": [],
     // Use 'postCreateCommand' to run commands after the container is created.
     "postCreateCommand": "bash .devcontainer/shell/setup.sh",
+    "postStartCommand": "bash .devcontainer/shell/setup.sh --database-only",
     // Configure tool-specific properties.
     "customizations": {
         "vscode": {
