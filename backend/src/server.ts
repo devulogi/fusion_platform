@@ -7,31 +7,31 @@ const port = Number(process.env.PORT) || 3001;
 const prisma = new PrismaClient();
 
 async function start(): Promise<void> {
-    const seedConfig = readSeedConfig();
-    await prisma.$connect();
+  const seedConfig = readSeedConfig();
+  await prisma.$connect();
 
-    const seedResult = await seedTrades(prisma, seedConfig);
+  const seedResult = await seedTrades(prisma, seedConfig);
 
-    if (seedResult.status !== 'disabled') {
-        console.info('Trade seeding result:', seedResult);
-    }
+  if (seedResult.status !== 'disabled') {
+    console.info('Trade seeding result:', seedResult);
+  }
 
-    const server = app.listen(port, () => {
-        console.log(`Backend listening on port ${port}`);
+  const server = app.listen(port, () => {
+    console.log(`Backend listening on port ${port}`);
+  });
+
+  const shutdown = (): void => {
+    server.close(() => {
+      void prisma.$disconnect();
     });
+  };
 
-    const shutdown = (): void => {
-        server.close(() => {
-            void prisma.$disconnect();
-        });
-    };
-
-    process.once('SIGINT', shutdown);
-    process.once('SIGTERM', shutdown);
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
 }
 
 void start().catch(async (error: unknown) => {
-    console.error('Backend startup failed:', error);
-    await prisma.$disconnect();
-    process.exitCode = 1;
+  console.error('Backend startup failed:', error);
+  await prisma.$disconnect();
+  process.exitCode = 1;
 });
