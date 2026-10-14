@@ -126,7 +126,8 @@ GitHub Copilot Chat in Visual Studio Code was used as an AI-assisted development
 
 ### How It Was Used
 
-- Copilot helped scaffold the backend and frontend, configure Docker Compose and Dev Containers, set up formatting/linting/testing workflows, and review setup decisions. Work so far has focused on Phase 1 environment setup; trade-domain behavior has not been generated yet.
+- Copilot helped scaffold the backend and frontend, configure Docker Compose and Dev Containers, set up formatting/linting/testing workflows, and review setup decisions.
+- Backend-scoped instructions, agents, and skills under `.github/` guide future story implementation, database changes, SSE work, and code review. They document workflows; they do not mean those Phase 3 features are implemented.
 
 ### Decisions Influenced by AI
 
