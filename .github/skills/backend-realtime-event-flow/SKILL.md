@@ -17,7 +17,7 @@ Use for SSE endpoint, event publisher, trade event contracts, or backend live-up
 2. Define a typed event contract for `trade.created`, `trade.amended`, and `trade.cancelled`, carrying the canonical persisted trade.
 3. Keep client commands on REST. SSE only carries server-to-client notifications.
 4. For mutations, enforce the order: database commit, cache update, event publication. A failed commit publishes nothing; a failed SSE send must not reverse a successful commit or fail the REST response.
-5. At startup, complete database connection, optional seed, and cache hydration before reporting readiness.
+5. Database migrations and optional seeding run through `.devcontainer/shell/setup.sh` before the backend starts. At backend startup, complete database connection and cache hydration before reporting readiness; do not seed from the API process.
 6. Clean up subscriber listeners when clients disconnect. Use SSE framing/content type correctly and avoid retaining dead responses.
 7. Address the initial snapshot race: establish the stream before fetching the collection, then reconcile events received while the snapshot is loading. After reconnect, reload the collection because events are not durable.
 8. Test event payloads, ordering, disconnect cleanup, persistence failure, and client recovery assumptions.

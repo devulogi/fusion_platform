@@ -1,6 +1,6 @@
 ---
 name: backend-database-change
-description: "Use when changing backend PostgreSQL persistence, Prisma schema, migrations, generated clients, or seed data."
+description: "Use when changing PostgreSQL persistence, the backend Prisma schema/client, SQL migrations, or SQL seed scripts."
 argument-hint: "Describe the schema or persistence change and its story."
 user-invocable: true
 ---
@@ -9,17 +9,17 @@ user-invocable: true
 
 ## When to use
 
-Use for PostgreSQL schema, Prisma, repository, migration, or seed-data work in `backend/`.
+Use for PostgreSQL schema, SQL migrations/seeds in `database/`, or Prisma client/repository work in `backend/`.
 
 ## Procedure
 
-1. Read backend instructions and the relevant user story. Inspect the current Prisma schema, migration history, repository, package scripts, and test setup before proposing changes.
+1. Read backend instructions and the relevant user story. Inspect `backend/prisma/schema.prisma`, SQL migrations and scripts under `database/`, the setup orchestrator, repositories, and tests before proposing changes.
 2. If no schema or migration workflow exists yet, treat setup as a design decision: agree on the initial model and migration strategy before creating one. Do not silently assume `db push` is the project's migration policy.
 3. Keep PostgreSQL authoritative. Define constraints for required trade fields, positive quantity/price, supported side/status values, and unique IDs in the appropriate layers.
-4. Create a migration using the repository's agreed Prisma workflow; review generated SQL and ensure the development path is reproducible.
-5. Keep seed behavior idempotent. If seeding on startup is selected, seed only an empty database before cache hydration and readiness.
+4. Create a versioned SQL migration under `database/migrations/`; verify `database/scripts/migrate.sh` applies it transactionally and records it in the migration ledger. Do not use Prisma Migrate for this repository's database setup.
+5. Keep SQL seeding idempotent and limited to an empty trade table. `.devcontainer/shell/setup.sh` is the only orchestrator for migrations and seeding; the backend process must not seed on startup.
 6. Update repository behavior and tests. For writes, ensure the transaction commits before cache mutation and event publication.
-7. Run Prisma validation/generation, focused database tests, backend lint, and TypeScript build where available. Report any database prerequisite or command that could not be exercised.
+7. Validate the SQL scripts against PostgreSQL without resetting developer data, generate Prisma client types, and run backend lint/tests/build as appropriate. Report any database prerequisite or command that could not be exercised.
 
 ## Safety
 

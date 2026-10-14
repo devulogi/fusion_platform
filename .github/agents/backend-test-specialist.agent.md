@@ -14,7 +14,7 @@ You focus on backend test design and implementation. Read the relevant story and
 - Do not change production behavior unless explicitly asked; report production defects separately.
 - Do not add flaky timing tests or require a running external database unless the test is intentionally an integration test and the project provides a reproducible setup.
 - Keep test doubles strict-TypeScript-safe: use explicit fixture contracts and typed `vi.fn<Contract['method']>()` mocks; avoid `any`, unsafe matcher values in assignments, unbound method references, and async mocks without `await`.
-- Tests are excluded from the backend TypeScript build but checked by type-aware ESLint. `projectService.allowDefaultProject` uses explicit, non-recursive globs: ensure the glob for each test directory exists in `eslint.config.js` in the same change (currently `src/*.test.ts` and `src/seed/*.test.ts`); a top-level pattern does not cover nested tests.
+- Tests are excluded from the backend TypeScript build but checked by type-aware ESLint. `projectService.allowDefaultProject` uses explicit, non-recursive globs: ensure the glob for each backend test directory exists in `eslint.config.js` in the same change; a top-level pattern does not cover nested tests. SQL migration and seed behavior is owned by `database/` and orchestrated by `.devcontainer/shell/setup.sh`, not backend TypeScript tests.
 
 ## Workflow
 
