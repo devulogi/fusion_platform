@@ -1,6 +1,6 @@
 # Backend User Stories
 
-**Status:** Proposed for Phase 3; not implemented.
+**Status:** Partially implemented. Story 1's trade schema and optional startup seeding are implemented; the other stories remain proposed.
 
 These stories translate the take-home requirements into backend behavior. Endpoint paths and business rules below are proposals to confirm during implementation, not claims about the current API.
 
@@ -9,12 +9,25 @@ These stories translate the take-home requirements into backend behavior. Endpoi
 - The API returns the full trade collection, expected to contain approximately 100–1,000 records. Sorting and filtering are client-side; pagination is not assumed.
 - PostgreSQL is the system of record. A process-local `Map<TradeId, Trade>` is a disposable read cache and is hydrated from the database.
 - Clients send create, amend, and cancel commands through REST. Server-to-client changes are delivered over SSE.
-- Use the supplied trade fields as the starting contract: trade ID, symbol, side, quantity, price, trader, trade timestamp, and status. Book and counterparty are included as optional sample-data fields; finalize the schema before implementing persistence.
+- The persisted trade contract uses the assessment's required fields: ID, symbol, side, quantity, price, trader, trade date, and status. Book and counterparty are optional sample-data fields.
 - Proposed domain assumptions: cancelled trades cannot be amended, and repeated cancellation is idempotent. Confirm these rules before implementation.
 
 ## Stories
 
-### 1. View the trade collection
+### 1. Seed an empty database
+
+As a reviewer, I want realistic sample trades when starting with an empty database so I can evaluate the blotter quickly.
+
+**Acceptance criteria**
+
+- Seeding is optional and runs only when no trades exist.
+- The generated dataset is within the agreed assessment scale (approximately 100–1,000 records) and uses valid symbols, sides, quantities, prices, traders, timestamps, and statuses.
+- Restarting the service does not duplicate seed data.
+- Seed failures are visible in startup logs and do not leave a partially cached collection.
+
+**Implementation:** The development Compose configuration opts in with `SEED_TRADES=true` and `SEED_TRADES_COUNT=500`. Seeding can be disabled with `SEED_TRADES=false`; configured counts must be between 100 and 1,000. Startup seeds only an empty table in a database transaction, before the API begins listening. The Prisma schema and initial SQL migration define the required trade fields and optional `book` and `counterparty` sample fields.
+
+### 2. View the trade collection
 
 As a blotter user, I want to retrieve the current trades so the frontend can display, sort, and filter them.
 
@@ -27,7 +40,18 @@ As a blotter user, I want to retrieve the current trades so the frontend can dis
 - An empty database returns an empty array unless the optional seed-on-empty behavior is enabled.
 - Database or hydration failure prevents the service from reporting ready; it retries according to the startup policy or exits for the container restart policy.
 
-### 2. Create a trade
+### 3. Check backend readiness
+
+As a developer, I want to know whether the backend and its database dependency are ready before relying on the service.
+
+**Acceptance criteria**
+
+- Liveness indicates whether the API process is running.
+- Readiness reports unavailable until PostgreSQL is reachable and initial cache hydration is complete.
+- Compose health checks use readiness so dependent services do not start against an uninitialized backend.
+- The current `/health` endpoint is a basic process check; a readiness check is a planned Phase 3 change.
+
+### 4. Create a trade
 
 As a trader, I want to create a trade so it is persisted and visible to all connected blotter users.
 
@@ -40,7 +64,7 @@ As a trader, I want to create a trade so it is persisted and visible to all conn
 - A validation failure returns HTTP `400` and changes neither persistence, cache, nor event stream.
 - A persistence failure does not update the cache or emit an event.
 
-### 3. Amend a trade
+### 5. Amend a trade
 
 As a trader, I want to amend an existing trade so corrections are reflected in the blotter and visible to other users.
 
@@ -53,7 +77,7 @@ As a trader, I want to amend an existing trade so corrections are reflected in t
 - Under the proposed domain rule, a cancelled trade cannot be amended.
 - If version-based optimistic concurrency is selected, a stale amendment returns HTTP `409` and leaves the cache and event stream unchanged.
 
-### 4. Cancel a trade
+### 6. Cancel a trade
 
 As a trader, I want to cancel an active trade without deleting its record, so the blotter retains the trade and its status.
 
@@ -65,7 +89,7 @@ As a trader, I want to cancel an active trade without deleting its record, so th
 - Repeating cancellation follows the agreed idempotency rule and does not publish duplicate state-change events.
 - Unknown trades return HTTP `404`; persistence failures do not alter cache state or publish an event.
 
-### 5. Receive live trade updates
+### 7. Receive live trade updates
 
 As a connected blotter user, I want other users' committed trade changes pushed to my browser without refreshing the page.
 
@@ -78,28 +102,6 @@ As a connected blotter user, I want other users' committed trade changes pushed 
 - Events are process-local and not durable. After reconnect, the client reloads `GET /api/trades` to reconcile missed events.
 - The client opens the event stream before fetching its initial snapshot and reconciles events received during that fetch, avoiding a snapshot/subscribe gap.
 - SSE delivery errors do not roll back committed data or change the successful REST response.
-
-### 6. Seed an empty database
-
-As a reviewer, I want realistic sample trades when starting with an empty database so I can evaluate the blotter quickly.
-
-**Acceptance criteria**
-
-- Seeding is optional and runs only when no trades exist.
-- The generated dataset is within the agreed assessment scale (approximately 100–1,000 records) and uses valid symbols, sides, quantities, prices, traders, timestamps, and statuses.
-- Restarting the service does not duplicate seed data.
-- Seed failures are visible in startup logs and do not leave a partially cached collection.
-
-### 7. Check backend readiness
-
-As a developer, I want to know whether the backend and its database dependency are ready before relying on the service.
-
-**Acceptance criteria**
-
-- Liveness indicates whether the API process is running.
-- Readiness reports unavailable until PostgreSQL is reachable and initial cache hydration is complete.
-- Compose health checks use readiness so dependent services do not start against an uninitialized backend.
-- The current `/health` endpoint is a basic process check; a readiness check is a planned Phase 3 change.
 
 ### 8. Explore the API contract
 

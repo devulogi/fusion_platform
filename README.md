@@ -6,7 +6,7 @@ A small full-stack trading platform take-home project. The repository is organiz
 
 - `frontend/`: React 18, TypeScript, Vite, Tailwind CSS, TanStack Table, React Hook Form, and Zod.
 - `backend/`: Express 4 and TypeScript, with Vitest and Supertest for testing.
-- `postgres`: PostgreSQL 16 for local development. Trade persistence is planned for Phase 3.
+- `postgres`: PostgreSQL 16 for local development. The trade schema and optional seed data use Prisma.
 - `workspace`: Node 24 development container used by VS Code.
 - `docker-compose.yml`: starts the workspace, database, backend, and frontend services.
 
@@ -23,7 +23,7 @@ Compose loads development-only service settings from `backend/.env.dev` and `fro
 
 ### Backend Decision Analysis and Resolution
 
-**Status:** Proposed for Phase 3; not implemented.
+**Status:** Partially implemented. The PostgreSQL trade schema and optional empty-database seeding are implemented; the REST trade API, cache, and SSE components below remain proposed.
 
 **Scope:** A single backend service for reading, creating, amending, and cancelling the assessment's approximately 100–1,000 trades. The API returns the complete collection; TanStack Table handles sorting and filtering in the browser. Pagination and multi-instance deployment are not assumed requirements.
 
@@ -75,6 +75,8 @@ docker compose up --build
 
 This builds and starts the development containers. The backend waits for PostgreSQL to become healthy, and the frontend waits for the backend health check.
 
+The backend applies checked-in Prisma migrations before starting. In development, `SEED_TRADES=true` seeds an empty database with 500 trades; set `SEED_TRADES=false` to disable it. `SEED_TRADES_COUNT` can be set from 100 to 1,000.
+
 - Frontend: <http://localhost:3001>
 - Backend health check: <http://localhost:4001/health>
 - PostgreSQL: `localhost:5432`
@@ -97,6 +99,8 @@ docker compose logs --follow postgres backend frontend
 
 VS Code uses the Compose configuration in `.devcontainer/devcontainer.json`, attaches to the `workspace` service, and starts the application and database services. The post-create setup installs package dependencies and configures the repository tooling.
 
+After dependency installation, setup generates Prisma types and runs `npm --prefix backend run db:verify-seed`. This runs the seeder unit tests plus an opt-in, read-only PostgreSQL check: it waits up to 60 seconds for backend startup and confirms that persisted trades exist, printing their count. Existing data is never reset or required to match the configured seed count. Disabled seeding prints a skip message; a failed verification fails setup. Normal unit test runs skip the live database check. This verifies database population, not cache hydration, which remains unimplemented.
+
 The same application URLs and local database settings listed above apply. Docker is required for this option as well.
 
 ## Run Checks
@@ -107,6 +111,7 @@ After dependencies are installed, run these commands from the repository root:
 npm run lint
 npm run format:check
 npm test
+npm run test:all
 ```
 
 To build the packages:
@@ -116,7 +121,7 @@ npm --prefix backend run build
 npm --prefix frontend run build
 ```
 
-Pre-commit hooks run ESLint and Prettier on staged files. Pre-push hooks run both Vitest suites.
+Pre-commit hooks run ESLint and Prettier on staged files. Pre-push hooks inspect the commits being pushed and run tests only for packages with changed files. Changes outside `backend/` and `frontend/` run both suites because they may affect the whole workspace.
 
 ## AI Usage Report
 

@@ -13,7 +13,7 @@ for project in backend frontend; do
         "semi": true,
         "trailingComma": "all",
         "printWidth": 100,
-        "tabWidth": 4,
+        "tabWidth": 2,
         "endOfLine": "lf"
 }
 EOF
