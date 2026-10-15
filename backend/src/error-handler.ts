@@ -26,10 +26,7 @@ export const errorHandler: ErrorRequestHandler = (error: unknown, _request, resp
       },
     });
     response.status(HttpStatus.SERVICE_UNAVAILABLE).json(errorResponse);
-    return;
-  }
-
-  if (error instanceof ZodError) {
+  } else if (error instanceof ZodError) {
     const errorResponse = validationErrorSchema.parse({
       error: {
         code: 'VALIDATION_FAILED',
@@ -42,16 +39,15 @@ export const errorHandler: ErrorRequestHandler = (error: unknown, _request, resp
       },
     });
     response.status(HttpStatus.BAD_REQUEST).json(errorResponse);
-    return;
+  } else {
+    console.error('Unhandled request error:', error);
+    const errorResponse = internalServerErrorSchema.parse({
+      error: {
+        code: 'INTERNAL_SERVER_ERROR',
+        message: internalServerErrorMessage,
+        details: [],
+      },
+    });
+    response.status(HttpStatus.INTERNAL_SERVER_ERROR).json(errorResponse);
   }
-
-  console.error('Unhandled request error:', error);
-  const errorResponse = internalServerErrorSchema.parse({
-    error: {
-      code: 'INTERNAL_SERVER_ERROR',
-      message: internalServerErrorMessage,
-      details: [],
-    },
-  });
-  response.status(HttpStatus.INTERNAL_SERVER_ERROR).json(errorResponse);
 };
