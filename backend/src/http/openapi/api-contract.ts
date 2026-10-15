@@ -13,18 +13,47 @@ import { createTradeInputSchema } from '../../features/trades/trade-input.ts';
 import { requestIdHeader, requestIdResponseHeader } from '../request-context.ts';
 import { z } from './zod.ts';
 import { ApiPath, HttpStatus } from '../constants.ts';
+import { TradeEventType } from '../../features/trades/trade-event-publisher.ts';
 
 const registry = new OpenAPIRegistry();
+
+const tradeExample = tradeResponseSchema.parse({
+  id: 'trade-example',
+  symbol: 'AAPL',
+  quantity: 100,
+  price: 185.25,
+  side: 'BUY',
+  trader: 'Alex Morgan',
+  tradeDate: '2026-10-14T12:00:00.000Z',
+  status: 'ACTIVE',
+  book: null,
+  counterparty: null,
+});
+const createdEventExample = `retry: 3000\n\nevent: ${TradeEventType.CREATED}\ndata: ${JSON.stringify(tradeExample)}\n\n`;
+registry.register('TradeCreatedEventData', tradeResponseSchema);
 
 registry.registerPath({
   method: 'post',
   path: ApiPath.trades,
+  operationId: 'createTrade',
   summary: 'Create a trade',
+  description:
+    'Validates and persists a trade, updates the process-local cache, then publishes trade.created. Returns the canonical saved trade. Validation failures do not persist or emit events.',
   request: {
     body: {
+      required: true,
       content: {
         'application/json': {
           schema: createTradeInputSchema,
+          example: {
+            symbol: tradeExample.symbol,
+            quantity: tradeExample.quantity,
+            price: tradeExample.price,
+            side: tradeExample.side,
+            trader: tradeExample.trader,
+            tradeDate: tradeExample.tradeDate,
+            status: tradeExample.status,
+          },
         },
       },
     },
@@ -36,6 +65,7 @@ registry.registerPath({
       content: {
         'application/json': {
           schema: tradeResponseSchema,
+          example: tradeExample,
         },
       },
     },
@@ -72,7 +102,21 @@ registry.registerPath({
 registry.registerPath({
   method: 'get',
   path: ApiPath.tradeEvents,
+  operationId: 'subscribeTradeEvents',
   summary: 'Subscribe to trade events',
+  description: [
+    'Long-lived text/event-stream connection. The only implemented named event is trade.created.',
+    'Each data field contains one JSON Trade object (the TradeCreatedEventData schema), not an event envelope or collection.',
+    'The payload is the canonical saved trade after database persistence and cache update; nullable book and counterparty fields remain present.',
+    'The server sends retry: 3000 on connection to suggest a 3000 millisecond EventSource reconnect delay.',
+    'Events are process-local and not durable. No event IDs are sent; Last-Event-ID replay is not supported.',
+    'After reconnect, clients must reload GET /api/v1/trades to recover missed changes.',
+    'For a gap-free snapshot, clients should establish the stream first and reconcile events buffered during the collection fetch.',
+    'Automatic client recovery and snapshot reconciliation are not implemented in the current frontend.',
+    'trade.amended and trade.cancelled are not implemented and are not currently emitted.',
+    'Disconnecting removes the subscriber. Once streaming starts, failures cannot be returned as JSON error bodies.',
+    'Swagger UI documents the stream but is not a live SSE event viewer; use EventSource or curl -N /api/v1/events on the backend origin.',
+  ].join('\n\n'),
   responses: {
     [HttpStatus.OK]: {
       headers: { [requestIdHeader]: requestIdResponseHeader },
@@ -80,6 +124,7 @@ registry.registerPath({
       content: {
         'text/event-stream': {
           schema: z.string().openapi('TradeEventStream'),
+          example: createdEventExample,
         },
       },
     },
@@ -89,7 +134,10 @@ registry.registerPath({
 registry.registerPath({
   method: 'get',
   path: ApiPath.health,
+  operationId: 'checkLiveness',
   summary: 'Check backend liveness',
+  description:
+    'Basic process liveness only. This endpoint does not probe database connectivity or implement the proposed readiness check.',
   responses: {
     [HttpStatus.OK]: {
       headers: { [requestIdHeader]: requestIdResponseHeader },
@@ -115,7 +163,10 @@ registry.registerPath({
 registry.registerPath({
   method: 'get',
   path: ApiPath.trades,
+  operationId: 'listTrades',
   summary: 'List all trades',
+  description:
+    'Returns the complete hydrated process-local collection as { items }, without pagination, counts, or per-request database reads. Sorting and filtering are client-side.',
   responses: {
     [HttpStatus.OK]: {
       headers: { [requestIdHeader]: requestIdResponseHeader },
@@ -123,6 +174,7 @@ registry.registerPath({
       content: {
         'application/json': {
           schema: tradeCollectionResponseSchema,
+          example: { items: [tradeExample] },
         },
       },
     },
@@ -152,5 +204,8 @@ export const openApiDocument = new OpenApiGeneratorV31(registry.definitions).gen
   info: {
     title: 'Fusion Platform Backend API',
     version: '1.0.0',
+    description:
+      'Implemented backend routes only. Create trades with POST /api/v1/trades, retrieve the full snapshot with GET /api/v1/trades, and subscribe to trade.created through GET /api/v1/events. Amend, cancel, and readiness routes remain proposed. X-Request-Id correlates each response with server logs.',
   },
+  servers: [{ url: '/', description: 'The backend origin serving this document and Swagger UI' }],
 });

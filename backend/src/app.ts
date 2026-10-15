@@ -1,15 +1,14 @@
 import express from 'express';
 import apiDocsRouter from './http/openapi/api-docs.ts';
 import { ApiPath } from './http/constants.ts';
-import { createErrorHandler } from './http/error-handler.ts';
-import { RouteNotFoundError } from './http/api-errors.ts';
+import { createErrorHandler, notFoundHandler } from './http/error-handler.ts';
 import {
   defaultRequestLogger,
-  recordRequestRoute,
   requestContext,
   type RequestLogger,
 } from './http/request-context.ts';
 import { tradeRouter } from './features/trades/trade-router.ts';
+import { tradeEventsRouter } from './features/trades/trade-events-router.ts';
 import { HealthController } from './features/health/controllers/health-controller.ts';
 import { TradeController } from './features/trades/controllers/trade-controller.ts';
 import { TradeEventsController } from './features/trades/controllers/trade-events-controller.ts';
@@ -30,17 +29,11 @@ export function createApp({
   const app = express();
 
   app.use(requestContext(logger));
-  app.use('/api-docs', recordRequestRoute('/api-docs'), apiDocsRouter);
-  app.get(ApiPath.health, recordRequestRoute(ApiPath.health), healthController.getHealth);
+  app.get(ApiPath.health, healthController.getHealth);
+  app.use(ApiPath.apiDocs, apiDocsRouter);
   app.use(ApiPath.trades, tradeRouter(tradeController));
-  app.get(
-    ApiPath.tradeEvents,
-    recordRequestRoute(ApiPath.tradeEvents),
-    tradeEventsController.stream,
-  );
-  app.use((_request, _response, next) => {
-    next(new RouteNotFoundError());
-  });
+  app.use(ApiPath.tradeEvents, tradeEventsRouter(tradeEventsController));
+  app.use(notFoundHandler);
   app.use(createErrorHandler(logger));
 
   return app;
