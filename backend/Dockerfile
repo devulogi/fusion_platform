@@ -20,7 +20,6 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY openapi.yaml ./openapi.yaml
 
 EXPOSE 4000
 CMD ["npm", "start"]
