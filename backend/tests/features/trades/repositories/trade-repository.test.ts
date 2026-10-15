@@ -23,7 +23,8 @@ describe('TradeRepository', () => {
     const findMany = vi
       .fn<TradeWriteDatabase['trade']['findMany']>()
       .mockResolvedValue([persistedTrade]);
-    const repository = new TradeRepository({ trade: { findMany } });
+    const create = vi.fn<TradeWriteDatabase['trade']['create']>();
+    const repository = new TradeRepository({ trade: { findMany, create } });
 
     await expect(repository.findAll()).resolves.toEqual([
       {
@@ -44,7 +45,8 @@ describe('TradeRepository', () => {
     const findMany = vi
       .fn<TradeWriteDatabase['trade']['findMany']>()
       .mockRejectedValue(databaseError);
-    const repository = new TradeRepository({ trade: { findMany } });
+    const create = vi.fn<TradeWriteDatabase['trade']['create']>();
+    const repository = new TradeRepository({ trade: { findMany, create } });
 
     await expect(repository.findAll()).rejects.toBe(databaseError);
   });
@@ -79,5 +81,25 @@ describe('TradeRepository', () => {
         counterparty: null,
       },
     });
+  });
+
+  it('propagates write failures without returning a fabricated trade', async () => {
+    const failure = new Error('Database unavailable');
+    const create = vi.fn<TradeWriteDatabase['trade']['create']>().mockRejectedValue(failure);
+    const findMany = vi.fn<TradeWriteDatabase['trade']['findMany']>();
+    const repository = new TradeRepository({ trade: { findMany, create } });
+
+    await expect(
+      repository.create({
+        symbol: 'AAPL',
+        quantity: 10,
+        price: 12,
+        side: 'BUY',
+        trader: 'Alex',
+        tradeDate: '2026-10-14T12:00:00.000Z',
+        status: 'ACTIVE',
+      }),
+    ).rejects.toBe(failure);
+    expect(findMany).not.toHaveBeenCalled();
   });
 });

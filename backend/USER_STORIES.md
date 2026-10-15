@@ -6,7 +6,7 @@ These stories translate the take-home requirements into backend behavior. Implem
 
 ## Scope and Assumptions
 
-- The API returns the full trade collection, expected to contain approximately 100–1,000 records. Sorting and filtering are client-side. The response includes metadata for the complete collection; server-side paging is not assumed.
+- The API returns the full trade collection as `{ items }`, expected to contain approximately 100–1,000 records. Sorting and filtering are client-side; redundant counts and pagination metadata are omitted.
 - PostgreSQL is the system of record. A process-local `Map<TradeId, Trade>` is a disposable read cache and is hydrated from the database.
 - Clients send create, amend, and cancel commands through REST. Server-to-client changes are delivered over SSE.
 - The persisted trade contract uses the assessment's required fields: ID, symbol, side, quantity, price, trader, trade date, and status. Book and counterparty are optional sample-data fields.
@@ -37,11 +37,11 @@ As a blotter user, I want to retrieve the current trades so the frontend can dis
 
 **Acceptance criteria**
 
-- `GET /api/v1/trades` returns `{ items, pagination }` with HTTP `200`; it returns the complete collection in one response without server-side paging.
+- `GET /api/v1/trades` returns `{ items }` with HTTP `200`; it returns the complete collection in one response without server-side paging or metadata.
 - Before the API reports ready, startup loads the persisted collection from PostgreSQL and populates the cache.
 - A request is not served from an uninitialized or partially populated cache.
 - Once ready, `GET /api/v1/trades` returns the complete in-memory collection without a database read.
-- A successfully loaded empty database returns `{ items: [], pagination: { totalItems: 0, currentPage: 1, totalPages: 0 } }` unless optional seed-on-empty behavior populates it.
+- A successfully loaded empty database returns `{ items: [] }` unless optional seed-on-empty behavior populates it.
 - Database or hydration failure prevents the service from reporting ready; it retries according to the startup policy or exits for the container restart policy.
 
 ### 3. Check backend readiness
@@ -70,7 +70,7 @@ As a trader, I want to create a trade so it is persisted and visible to all conn
 - A validation failure returns HTTP `400` with the structured error envelope and changes neither persistence, cache, nor event stream.
 - A persistence failure does not update the cache or emit an event.
 
-**Implementation:** The POST route validates input with Zod. The repository persists through Prisma and returns the canonical saved trade; the service updates the cache, then publishes `trade.created`; the controller returns the serialized trade with HTTP `201`. Omitted optional `book` and `counterparty` fields are represented as `null` in the response.
+**Implementation:** The POST route and service validate input using the same Zod schema, including when the service is called outside HTTP. The repository persists through Prisma and returns the canonical saved trade; the service updates the cache, then publishes `trade.created`; the controller returns the serialized trade with HTTP `201`. Omitted optional `book` and `counterparty` fields are represented as `null` in the response. JSON errors contain `{ error: { code, reason, requestId } }`, with `details: [{ field, reason }]` for validation failures. Responses include a server-generated `X-Request-Id`, correlated with request/error logs.
 
 ### 5. Amend a trade
 
