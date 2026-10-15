@@ -9,7 +9,8 @@ import {
   tradeCollectionResponseSchema,
   tradeResponseSchema,
 } from './features/trades/serializers/trade-serializer.ts';
-import { createTradeRequestSchema } from './features/trades/controllers/trade-controller.ts';
+import { createTradeInputSchema } from './features/trades/trade-input.ts';
+import { requestIdHeader, requestIdResponseHeader } from './request-context.ts';
 import { z } from './openapi/zod.ts';
 import { ApiPath, HttpStatus } from './constants.ts';
 
@@ -23,13 +24,14 @@ registry.registerPath({
     body: {
       content: {
         'application/json': {
-          schema: createTradeRequestSchema,
+          schema: createTradeInputSchema,
         },
       },
     },
   },
   responses: {
     [HttpStatus.CREATED]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
       description: 'Trade created',
       content: {
         'application/json': {
@@ -38,6 +40,7 @@ registry.registerPath({
       },
     },
     [HttpStatus.BAD_REQUEST]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
       description: 'Request validation failed',
       content: {
         'application/json': {
@@ -45,7 +48,17 @@ registry.registerPath({
         },
       },
     },
+    [HttpStatus.SERVICE_UNAVAILABLE]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Trade collection is not ready',
+      content: {
+        'application/json': {
+          schema: tradeCollectionNotReadySchema,
+        },
+      },
+    },
     [HttpStatus.INTERNAL_SERVER_ERROR]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
       description: 'Unexpected server error',
       content: {
         'application/json': {
@@ -62,6 +75,7 @@ registry.registerPath({
   summary: 'Subscribe to trade events',
   responses: {
     [HttpStatus.OK]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
       description: 'Server-sent trade events',
       content: {
         'text/event-stream': {
@@ -78,6 +92,7 @@ registry.registerPath({
   summary: 'Check backend liveness',
   responses: {
     [HttpStatus.OK]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
       description: 'Backend process is running',
       content: {
         'application/json': {
@@ -86,6 +101,7 @@ registry.registerPath({
       },
     },
     [HttpStatus.INTERNAL_SERVER_ERROR]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
       description: 'Unexpected server error',
       content: {
         'application/json': {
@@ -102,6 +118,7 @@ registry.registerPath({
   summary: 'List all trades',
   responses: {
     [HttpStatus.OK]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
       description: 'Complete trade collection',
       content: {
         'application/json': {
@@ -110,6 +127,7 @@ registry.registerPath({
       },
     },
     [HttpStatus.SERVICE_UNAVAILABLE]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
       description: 'Trade collection is not ready',
       content: {
         'application/json': {
@@ -118,6 +136,7 @@ registry.registerPath({
       },
     },
     [HttpStatus.INTERNAL_SERVER_ERROR]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
       description: 'Unexpected server error',
       content: {
         'application/json': {
