@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { parseDocument } from 'yaml';
-import { ApiPath } from '../../src/constants.ts';
+import { ApiPath } from '../../src/http/constants.ts';
 import { createApp } from '../../src/app.ts';
 import { HealthController } from '../../src/features/health/controllers/health-controller.ts';
 import { TradeController } from '../../src/features/trades/controllers/trade-controller.ts';

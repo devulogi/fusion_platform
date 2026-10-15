@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express';
-import { z } from '../../../openapi/zod.ts';
+import { z } from '../../../http/openapi/zod.ts';
 
 export const healthResponseSchema = z
   .object({

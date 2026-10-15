@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express';
-import { HttpStatus } from '../../../constants.ts';
+import { HttpStatus } from '../../../http/constants.ts';
 import { serializeTrade } from '../serializers/trade-serializer.ts';
 import { TradeEventPublisher } from '../trade-event-publisher.ts';
 

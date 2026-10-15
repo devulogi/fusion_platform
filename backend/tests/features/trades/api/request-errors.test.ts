@@ -6,9 +6,9 @@ import {
   internalServerErrorSchema,
   routeNotFoundSchema,
   validationErrorSchema,
-} from '../../../../src/api-errors.ts';
-import { ApiPath } from '../../../../src/constants.ts';
-import type { RequestLogger } from '../../../../src/request-context.ts';
+} from '../../../../src/http/api-errors.ts';
+import { ApiPath } from '../../../../src/http/constants.ts';
+import type { RequestLogger } from '../../../../src/http/request-context.ts';
 import { HealthController } from '../../../../src/features/health/controllers/health-controller.ts';
 import { TradeController } from '../../../../src/features/trades/controllers/trade-controller.ts';
 import { TradeEventsController } from '../../../../src/features/trades/controllers/trade-events-controller.ts';

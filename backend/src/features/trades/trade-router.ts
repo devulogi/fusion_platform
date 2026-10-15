@@ -1,6 +1,6 @@
 import { json, Router } from 'express';
-import { ApiPath } from '../../constants.ts';
-import { recordRequestRoute } from '../../request-context.ts';
+import { ApiPath } from '../../http/constants.ts';
+import { recordRequestRoute } from '../../http/request-context.ts';
 import type { TradeController } from './controllers/trade-controller.ts';
 
 export function tradeRouter(controller: TradeController): Router {

@@ -1,5 +1,5 @@
 import type { Trade } from '../models/trade.ts';
-import { z } from '../../../openapi/zod.ts';
+import { z } from '../../../http/openapi/zod.ts';
 
 export const tradeResponseSchema = z
   .object({

@@ -1,4 +1,4 @@
-import { z } from '../../openapi/zod.ts';
+import { z } from '../../http/openapi/zod.ts';
 import type { ZodError } from 'zod';
 
 export const createTradeInputSchema = z
