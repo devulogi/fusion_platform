@@ -1,7 +1,7 @@
 // main application setup
 import express, { Router } from 'express';
 import apiDocsRouter from './api-docs.ts';
-import { ApiPath } from './api-contract.ts';
+import { ApiPath } from './constants.ts';
 import { errorHandler } from './error-handler.ts';
 // controllers
 import { HealthController } from './features/health/controllers/health-controller.ts';

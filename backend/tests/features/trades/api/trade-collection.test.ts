@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { validationErrorSchema } from '../../../../src/api-errors.ts';
 import { createApp } from '../../../../src/app.ts';
-import { ApiPath } from '../../../../src/api-contract.ts';
+import { ApiPath } from '../../../../src/constants.ts';
 import { HealthController } from '../../../../src/features/health/controllers/health-controller.ts';
 import { TradeController } from '../../../../src/features/trades/controllers/trade-controller.ts';
 import { TradeCache } from '../../../../src/features/trades/trade-cache.ts';
