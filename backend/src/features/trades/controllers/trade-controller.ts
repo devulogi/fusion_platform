@@ -16,11 +16,11 @@ export const tradeCollectionNotReadySchema = z
   })
   .openapi('TradeCollectionNotReadyError');
 
-export function createTradeController(service: TradeService): {
-  getAll: RequestHandler;
-} {
-  const getAll: RequestHandler = (_request, response) => {
-    const trades = service.getAllTrades();
+export class TradeController {
+  constructor(private readonly tradeService: TradeService) {}
+
+  readonly getAll: RequestHandler = (_request, response) => {
+    const trades = this.tradeService.getAllTrades();
 
     if (trades === undefined) {
       const errorResponse = tradeCollectionNotReadySchema.parse({
@@ -32,6 +32,4 @@ export function createTradeController(service: TradeService): {
 
     response.status(HttpStatus.OK).json(trades.map(serializeTrade));
   };
-
-  return { getAll };
 }

@@ -1,12 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../../../src/app.ts';
+import { ApiPath } from '../../../../src/api-contract.ts';
+import { HealthController } from '../../../../src/features/health/controllers/health-controller.ts';
+import { TradeController } from '../../../../src/features/trades/controllers/trade-controller.ts';
 import { TradeCache } from '../../../../src/features/trades/trade-cache.ts';
 import { tradeCollectionResponseSchema } from '../../../../src/features/trades/serializers/trade-serializer.ts';
+import { TradeService } from '../../../../src/features/trades/services/trade-service.ts';
+
+function createTestApp(tradeCache: TradeCache) {
+  return createApp({
+    healthController: new HealthController(),
+    tradeController: new TradeController(new TradeService(tradeCache)),
+  });
+}
 
 describe('GET /api/trades', () => {
   it('does not serve a collection before cache hydration', async () => {
-    const response = await request(createApp(new TradeCache())).get('/api/trades');
+    const response = await request(createTestApp(new TradeCache())).get(ApiPath.trades);
 
     expect(response.status).toBe(503);
     expect(response.body).toEqual({
@@ -39,7 +50,7 @@ describe('GET /api/trades', () => {
       },
     ]);
 
-    const response = await request(createApp(tradeCache)).get('/api/trades');
+    const response = await request(createTestApp(tradeCache)).get(ApiPath.trades);
 
     expect(response.status).toBe(200);
     expect(tradeCollectionResponseSchema.parse(response.body)).toEqual([
@@ -70,7 +81,7 @@ describe('GET /api/trades', () => {
     const tradeCache = new TradeCache();
     tradeCache.hydrate([]);
 
-    const response = await request(createApp(tradeCache)).get('/api/trades');
+    const response = await request(createTestApp(tradeCache)).get(ApiPath.trades);
 
     expect(response.status).toBe(200);
     expect(tradeCollectionResponseSchema.parse(response.body)).toEqual([]);
