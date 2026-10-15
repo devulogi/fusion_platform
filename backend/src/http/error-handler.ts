@@ -1,4 +1,4 @@
-import type { ErrorRequestHandler } from 'express';
+import type { ErrorRequestHandler, RequestHandler } from 'express';
 import { TradeInputValidationError } from '../features/trades/trade-input.ts';
 import { TradeCacheNotHydratedError } from '../features/trades/trade-cache.ts';
 import {
@@ -13,6 +13,10 @@ import {
 } from './api-errors.ts';
 import { HttpStatus } from './constants.ts';
 import { defaultRequestLogger, getRequestId, type RequestLogger } from './request-context.ts';
+
+export const notFoundHandler: RequestHandler = (_request, _response, next) => {
+  next(new RouteNotFoundError());
+};
 
 export function createErrorHandler(
   logger: RequestLogger = defaultRequestLogger,

@@ -38,6 +38,19 @@ function setup() {
 }
 
 describe('Request errors and traceability', () => {
+  it('traces the direct health route without exposing query values', async () => {
+    const { app, info } = setup();
+    const response = await request(app).get(`${ApiPath.health}?token=private`);
+
+    expect(response.status).toBe(200);
+    expect(info.mock.calls[0]?.[0]).toMatchObject({
+      requestId: response.headers['x-request-id'],
+      route: ApiPath.health,
+      status: 200,
+    });
+    expect(JSON.stringify(info.mock.calls)).not.toContain('private');
+  });
+
   it('generates distinct request IDs rather than trusting caller IDs', async () => {
     const { app, info } = setup();
     const first = await request(app).get(ApiPath.trades).set('X-Request-Id', 'untrusted');

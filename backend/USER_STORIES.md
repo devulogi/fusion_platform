@@ -1,6 +1,6 @@
 # Backend User Stories
 
-**Status:** Stories 1, 2, and 4 are implemented. Story 7 is partially implemented; Stories 3, 5, 6, 8, and 9 remain proposed.
+**Status:** Stories 1, 2, 4, and 8 are implemented. Story 7 is partially implemented; Stories 3, 5, 6, and 9 remain proposed.
 
 These stories translate the take-home requirements into backend behavior. Implemented stories describe current behavior; paths and business rules in proposed stories are not claims about available API behavior.
 
@@ -117,6 +117,8 @@ As a connected blotter user, I want other users' committed trade changes pushed 
 
 ### 8. Explore the API contract
 
+**Status:** Implemented
+
 As an interviewer or frontend developer, I want a browsable API contract so I can understand and try the implemented backend endpoints.
 
 **Acceptance criteria**
@@ -125,6 +127,8 @@ As an interviewer or frontend developer, I want a browsable API contract so I ca
 - Swagger UI is served by the backend at `/api-docs` on the existing API port; it does not introduce another service or port.
 - The specification is updated alongside API changes and does not present planned endpoints as implemented.
 - The SSE endpoint documents its `text/event-stream` response, event names, payload shape, and reconnect expectations. Any SSE details not represented clearly by the chosen OpenAPI tooling are documented alongside the specification.
+
+**Implementation:** Swagger UI is served at `/api-docs` (redirecting to `/api-docs/`) on the backend's existing port, with the generated specification at `/api-docs/openapi.yaml`. The specification describes the implemented liveness, collection, creation, and SSE routes, request/response schemas, error statuses, and request-ID headers. Examples support trying creation and inspecting collection responses. The SSE operation description includes the `trade.created` payload schema and wire example, retry interval, lack of durable replay, and client recovery expectations. It explicitly distinguishes proposed amend/cancel events and unimplemented client reconciliation from current behavior; Swagger UI is not an SSE event viewer.
 
 ### 9. Review the backend architecture
 

@@ -11,4 +11,5 @@ export const ApiPath = {
   health: '/health',
   trades: '/api/v1/trades',
   tradeEvents: '/api/v1/events',
+  apiDocs: '/api-docs',
 } as const;

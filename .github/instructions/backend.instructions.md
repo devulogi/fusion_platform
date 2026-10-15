@@ -23,12 +23,14 @@ applyTo: "backend/**"
 - Introduce supporting components only when they have a distinct responsibility; do not make them mandatory layers or create abstractions by default.
 - Maintain a feature-first structure under `backend/src/features/<feature>/`: group code by the business capability it serves, with any needed `controllers/`, `services/`, and `repositories/` inside that feature. Do not organize the application as top-level layer folders or require empty/template-matching folders. Keep feature-specific supporting components with their feature.
 - Keep HTTP application setup separate from process startup and resource lifecycle. Configure Express in `backend/src/app.ts`; wire dependencies explicitly and manage startup/shutdown in `backend/src/server.ts`, keeping feature logic out of setup code. Extract shared infrastructure only when genuinely needed across features; do not require a DI container or additional composition layers.
+- Keep application setup conventional and declarative: register global middleware once, register the basic health check with `app.get`, mount feature/documentation routers with `app.use`, then register named not-found and error middleware. Keep route-specific parsing and tracing inside routers, not repeated on application mount lines.
+- Use one SSE endpoint for trade streaming, with one long-running HTTP connection per subscribed client. Register its GET handler inside the events router; request-context middleware supplies traceability and must not create additional streams or background connections.
 - Group shared HTTP concerns in `backend/src/http/`, with API documentation and schema-generation helpers in `http/openapi/`. Keep feature-specific helpers inside their feature; do not create a separate folder for every file.
 - Keep functions focused, testable, and readable; avoid unnecessary shared-state mutation.
 
 ## Controller design
 
-- Keep route registration in Express routers and request handling in thin controllers.
+- Keep feature route registration in Express routers and request handling in thin controllers; the basic health check may be registered directly in application setup.
 - Validate untrusted HTTP bodies, parameters, and query values with Zod before calling application logic. Map validated values to use-case inputs; do not pass Express request or response objects into services.
 - Delegate use-case execution to application logic rather than implementing business rules, persistence operations, or cache/event coordination in controllers.
 - Map successful results to the appropriate HTTP status, headers, and response contract. Extract response mapping into a supporting component only when its complexity or reuse warrants it.

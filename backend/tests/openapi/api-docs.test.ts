@@ -10,6 +10,8 @@ import { TradeCache } from '../../src/features/trades/trade-cache.ts';
 import { TradeRepository } from '../../src/features/trades/repositories/trade-repository.ts';
 import { TradeEventPublisher } from '../../src/features/trades/trade-event-publisher.ts';
 import { TradeService } from '../../src/features/trades/services/trade-service.ts';
+import { tradeResponseSchema } from '../../src/features/trades/serializers/trade-serializer.ts';
+import { z } from 'zod';
 
 const tradeEventPublisher = new TradeEventPublisher();
 const app = createApp({
@@ -30,6 +32,70 @@ const app = createApp({
 });
 
 describe('API documentation', () => {
+  it('redirects the documented entry point to Swagger UI and serves its assets', async () => {
+    const redirect = await request(app).get('/api-docs');
+    expect(redirect.status).toBe(301);
+    expect(redirect.headers.location).toBe('/api-docs/');
+
+    const script = await request(app).get('/api-docs/swagger-ui-init.js');
+    expect(script.status).toBe(200);
+    expect(script.text).toContain('/api-docs/openapi.yaml');
+    const stylesheet = await request(app).get('/api-docs/swagger-ui.css');
+    expect(stylesheet.status).toBe(200);
+    expect(stylesheet.type).toBe('text/css');
+  });
+
+  it('documents only implemented routes and explains the live event contract', async () => {
+    const response = await request(app).get('/api-docs/openapi.yaml');
+    const document = parseDocument(response.text);
+    const { paths } = z.object({ paths: z.record(z.unknown()) }).parse(document.toJS());
+    expect(Object.keys(paths).sort()).toEqual(
+      [ApiPath.health, ApiPath.trades, ApiPath.tradeEvents].sort(),
+    );
+    expect(document.toJS()).toMatchObject({
+      servers: [{ url: '/' }],
+      paths: {
+        [ApiPath.trades]: {
+          get: { operationId: 'listTrades' },
+          post: { operationId: 'createTrade' },
+        },
+        [ApiPath.health]: { get: { operationId: 'checkLiveness' } },
+        [ApiPath.tradeEvents]: { get: { operationId: 'subscribeTradeEvents' } },
+      },
+    });
+    expect(document.getIn(['paths', ApiPath.trades, 'patch'])).toBeUndefined();
+    expect(document.getIn(['paths', '/api/v1/trades/{tradeId}'])).toBeUndefined();
+    expect(document.getIn(['paths', '/ready'])).toBeUndefined();
+
+    const description = z
+      .string()
+      .parse(document.getIn(['paths', ApiPath.tradeEvents, 'get', 'description']));
+    expect(description).toContain('trade.created');
+    expect(description).toContain('Last-Event-ID');
+    expect(description).toContain('not implemented');
+    expect(description).toContain('3000');
+    expect(description).toContain('GET /api/v1/trades');
+    const example = z
+      .string()
+      .parse(
+        document.getIn([
+          'paths',
+          ApiPath.tradeEvents,
+          'get',
+          'responses',
+          '200',
+          'content',
+          'text/event-stream',
+          'example',
+        ]),
+      );
+    expect(example).toMatch(/^retry: 3000\n\nevent: trade.created\ndata: /);
+    const data = example.split('\n').find((line) => line.startsWith('data: '));
+    if (data === undefined) throw new Error('Missing event data example');
+    const payload: unknown = JSON.parse(data.slice('data: '.length));
+    expect(tradeResponseSchema.parse(payload)).toMatchObject({ book: null, counterparty: null });
+  });
+
   it('serves Swagger UI from the backend', async () => {
     const response = await request(app).get('/api-docs/');
 
