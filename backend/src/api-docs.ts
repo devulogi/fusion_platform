@@ -1,9 +1,9 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import express from 'express';
 import swaggerUi from 'swagger-ui-express';
+import { stringify } from 'yaml';
+import { openApiDocument } from './api-contract.ts';
 
-const openApiSpecification = readFileSync(resolve(process.cwd(), 'openapi.yaml'), 'utf8');
+const openApiSpecification = stringify(openApiDocument);
 const router = express.Router();
 
 router.get('/openapi.yaml', (_request, response) => {
