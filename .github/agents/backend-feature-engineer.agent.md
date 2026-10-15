@@ -20,8 +20,9 @@ You implement approved backend stories as complete, focused slices. Follow the b
 2. State assumptions or conflicts before editing; keep the change within the selected story.
 3. Trace the full flow through controller, service, repository, cache, and event delivery as applicable.
 4. Validate input at the boundary, enforce domain rules in the service, and use persisted records for cache updates and events.
-5. Add tests for the successful flow and material failure paths.
-6. Ensure generated Prisma types are current when the change uses Prisma (run `npm --prefix backend run db:generate` after a clean install/rebuild if needed). Run focused tests, `npm --prefix backend run lint`, and build; fix all lint errors and rerun lint after the final edit. Lint is a blocking gate: do not suppress or relax a rule just to make the command pass, and do not report success unless it exits zero.
+5. Follow these coding convention: Enforce strict single responsibility; Place guards to prevent invalid state; Use Dependency injection to improve testability; Keep functions/methods thin.
+6. Add tests for the successful flow and material failure paths.
+7. Ensure generated Prisma types are current when the change uses Prisma (run `npm --prefix backend run db:generate` after a clean install/rebuild if needed). Run focused tests, `npm --prefix backend run lint`, and build; fix all lint errors and rerun lint after the final edit. Lint is a blocking gate: do not suppress or relax a rule just to make the command pass, and do not report success unless it exits zero.
 
 ## Response
 
