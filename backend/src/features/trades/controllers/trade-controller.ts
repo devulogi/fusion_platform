@@ -1,4 +1,5 @@
 import type { RequestHandler } from 'express';
+import { z } from '../../../openapi/zod.ts';
 import { TradeService } from '../services/trade-service.ts';
 import { serializeTrade } from '../serializers/trade-serializer.ts';
 
@@ -9,6 +10,12 @@ const HttpStatus = {
 
 const collectionNotReadyMessage = 'Trade collection is not ready';
 
+export const tradeCollectionNotReadySchema = z
+  .object({
+    error: z.literal(collectionNotReadyMessage),
+  })
+  .openapi('TradeCollectionNotReadyError');
+
 export function createTradeController(service: TradeService): {
   getAll: RequestHandler;
 } {
@@ -16,9 +23,10 @@ export function createTradeController(service: TradeService): {
     const trades = service.getAllTrades();
 
     if (trades === undefined) {
-      response.status(HttpStatus.SERVICE_UNAVAILABLE).json({
+      const errorResponse = tradeCollectionNotReadySchema.parse({
         error: collectionNotReadyMessage,
       });
+      response.status(HttpStatus.SERVICE_UNAVAILABLE).json(errorResponse);
       return;
     }
 
