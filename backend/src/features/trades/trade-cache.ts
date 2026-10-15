@@ -29,7 +29,7 @@ export class TradeCache {
 
   getAll(): readonly Trade[] {
     this.assertHydrated();
-    return Array.from(this.tradesById.values());
+    return Array.from(this.tradesById.values(), (trade) => ({ ...trade }));
   }
 
   assertHydrated(): void {

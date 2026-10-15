@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   TradeCache,
   TradeCacheNotHydratedError,
@@ -57,6 +57,7 @@ describe('TradeService', () => {
     const savedTrade: Trade = { id: 'generated-id', ...input };
     const operationOrder: string[] = [];
     const tradeRepository = {
+      findAll: () => Promise.resolve([]),
       create: (trade: CreateTradeInput) => {
         expect(trade).toEqual(input);
         operationOrder.push('persist');
@@ -82,6 +83,7 @@ describe('TradeService', () => {
     const persistenceError = new Error('Database unavailable');
     let eventPublished = false;
     const tradeRepository = {
+      findAll: () => Promise.resolve([]),
       create: () => Promise.reject(persistenceError),
     };
     const tradeEventPublisher = {
@@ -129,5 +131,73 @@ describe('TradeService', () => {
       }),
     ).rejects.toThrow(TradeCacheNotHydratedError);
     expect(repositoryCallCount).toBe(0);
+  });
+
+  it('validates service input before accessing state or dependencies', async () => {
+    const create = vi.fn<TradeRepositoryContract['create']>();
+    const service = new TradeService(
+      new TradeCache(),
+      { findAll: () => Promise.resolve([]), create },
+      new TradeEventPublisher(),
+    );
+
+    await expect(
+      service.createTrade({
+        symbol: 'AAPL',
+        quantity: 0,
+        price: 185.25,
+        side: 'BUY',
+        trader: 'Alex Morgan',
+        tradeDate: '2026-10-14T12:00:00.000Z',
+        status: 'ACTIVE',
+      }),
+    ).rejects.toMatchObject({ name: 'TradeInputValidationError' });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('normalizes direct service inputs through the shared validator', async () => {
+    const cache = new TradeCache();
+    cache.hydrate([]);
+    const input: CreateTradeInput = {
+      symbol: ' AAPL ',
+      quantity: 10,
+      price: 12,
+      side: 'BUY',
+      trader: ' Alex ',
+      tradeDate: '2026-10-14T12:00:00.000Z',
+      status: 'ACTIVE',
+    };
+    const savedTrade: Trade = { ...input, id: 'saved', symbol: 'AAPL', trader: 'Alex' };
+    const create = vi.fn<TradeRepositoryContract['create']>().mockResolvedValue(savedTrade);
+    const service = new TradeService(
+      cache,
+      { findAll: () => Promise.resolve([]), create },
+      new TradeEventPublisher(),
+    );
+
+    await expect(service.createTrade(input)).resolves.toEqual(savedTrade);
+    expect(create).toHaveBeenCalledWith({ ...input, symbol: 'AAPL', trader: 'Alex' });
+  });
+
+  it('does not expose mutable cached records to callers', () => {
+    const cache = new TradeCache();
+    const original = {
+      id: 'trade-1',
+      symbol: 'AAPL',
+      quantity: 10,
+      price: 12,
+      side: 'BUY' as const,
+      trader: 'Alex',
+      tradeDate: '2026-10-14T12:00:00.000Z',
+      status: 'ACTIVE' as const,
+    };
+    cache.hydrate([original]);
+    const service = new TradeService(cache, unusedTradeRepository, new TradeEventPublisher());
+    original.symbol = 'CHANGED';
+    const returned = service.getAllTrades()[0];
+    if (returned === undefined) throw new Error('Expected a cached trade');
+    Object.assign(returned, { symbol: 'CHANGED' });
+
+    expect(service.getAllTrades()[0]?.symbol).toBe('AAPL');
   });
 });

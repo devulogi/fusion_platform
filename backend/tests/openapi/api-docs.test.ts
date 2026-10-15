@@ -56,6 +56,7 @@ describe('API documentation', () => {
     expect(document.getIn(['paths', ApiPath.trades, 'post', 'requestBody'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'post', 'responses', '201'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'post', 'responses', '400'])).toBeDefined();
+    expect(document.getIn(['paths', ApiPath.trades, 'post', 'responses', '503'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'post', 'responses', '500'])).toBeDefined();
     expect(
       document.getIn([
@@ -82,5 +83,54 @@ describe('API documentation', () => {
       ]),
     ).toBeDefined();
     expect(document.getIn(['components', 'schemas', 'Trade'])).toBeDefined();
+    expect(document.toJS()).toMatchObject({
+      components: {
+        schemas: {
+          TradeCollectionResponse: { required: ['items'] },
+        },
+      },
+    });
+    expect(
+      document.getIn([
+        'components',
+        'schemas',
+        'TradeCollectionResponse',
+        'properties',
+        'pagination',
+      ]),
+    ).toBeUndefined();
+    expect(
+      document.getIn([
+        'components',
+        'schemas',
+        'ValidationError',
+        'properties',
+        'error',
+        'properties',
+        'reason',
+      ]),
+    ).toBeDefined();
+    expect(
+      document.getIn([
+        'components',
+        'schemas',
+        'ValidationError',
+        'properties',
+        'error',
+        'properties',
+        'message',
+      ]),
+    ).toBeUndefined();
+    expect(
+      document.getIn([
+        'paths',
+        ApiPath.trades,
+        'post',
+        'responses',
+        '201',
+        'headers',
+        'X-Request-Id',
+      ]),
+    ).toBeDefined();
   });
 });

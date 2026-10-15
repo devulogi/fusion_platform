@@ -46,8 +46,8 @@ describe('GET /api/trades', () => {
     expect(response.body).toEqual({
       error: {
         code: 'TRADE_COLLECTION_NOT_READY',
-        message: 'Trade collection is not ready',
-        details: [],
+        reason: 'Trade collection is not ready',
+        requestId: response.headers['x-request-id'],
       },
     });
   });
@@ -107,11 +107,6 @@ describe('GET /api/trades', () => {
           counterparty: null,
         },
       ],
-      pagination: {
-        totalItems: 2,
-        currentPage: 1,
-        totalPages: 1,
-      },
     });
   });
 
@@ -124,11 +119,6 @@ describe('GET /api/trades', () => {
     expect(response.status).toBe(200);
     expect(tradeCollectionResponseSchema.parse(response.body)).toEqual({
       items: [],
-      pagination: {
-        totalItems: 0,
-        currentPage: 1,
-        totalPages: 0,
-      },
     });
   });
 
@@ -139,8 +129,8 @@ describe('GET /api/trades', () => {
     expect(response.body).toEqual({
       error: {
         code: 'INTERNAL_SERVER_ERROR',
-        message: 'Internal server error',
-        details: [],
+        reason: 'Internal server error',
+        requestId: response.headers['x-request-id'],
       },
     });
     expect(response.text).not.toContain('Sensitive persistence detail');
@@ -226,7 +216,7 @@ describe('GET /api/trades', () => {
     expect(response.status).toBe(400);
     expect(errorResponse.error).toMatchObject({
       code: 'VALIDATION_FAILED',
-      message: 'The provided payload failed data validation rules.',
+      reason: 'The provided payload failed data validation rules.',
     });
     expect(errorResponse.error.details.length).toBeGreaterThan(0);
     expect(createTrade).not.toHaveBeenCalled();
