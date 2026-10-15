@@ -7,6 +7,8 @@ export const healthResponseSchema = z
   })
   .openapi('HealthResponse');
 
-export const healthController: RequestHandler = (_request, response) => {
-  response.json(healthResponseSchema.parse({ status: 'ok' }));
-};
+export class HealthController {
+  readonly getHealth: RequestHandler = (_request, response) => {
+    response.json(healthResponseSchema.parse({ status: 'ok' }));
+  };
+}

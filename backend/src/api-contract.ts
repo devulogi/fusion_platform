@@ -5,7 +5,7 @@ import { tradeCollectionResponseSchema } from './features/trades/serializers/tra
 
 export const ApiPath = {
   health: '/health',
-  trades: '/api/trades',
+  trades: '/api/v1/trades',
 } as const;
 
 const registry = new OpenAPIRegistry();
