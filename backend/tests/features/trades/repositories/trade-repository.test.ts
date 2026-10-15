@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { TradeRepository } from '../../../../src/features/trades/repositories/trade-repository.ts';
 import type {
   PersistedTrade,
-  TradeReadDatabase,
+  TradeWriteDatabase,
 } from '../../../../src/features/trades/repositories/trade-repository.ts';
 
 const persistedTrade: PersistedTrade = {
@@ -21,7 +21,7 @@ const persistedTrade: PersistedTrade = {
 describe('TradeRepository', () => {
   it('maps persisted records to domain trades', async () => {
     const findMany = vi
-      .fn<TradeReadDatabase['trade']['findMany']>()
+      .fn<TradeWriteDatabase['trade']['findMany']>()
       .mockResolvedValue([persistedTrade]);
     const repository = new TradeRepository({ trade: { findMany } });
 
@@ -42,10 +42,42 @@ describe('TradeRepository', () => {
   it('propagates database read failures', async () => {
     const databaseError = new Error('Database unavailable');
     const findMany = vi
-      .fn<TradeReadDatabase['trade']['findMany']>()
+      .fn<TradeWriteDatabase['trade']['findMany']>()
       .mockRejectedValue(databaseError);
     const repository = new TradeRepository({ trade: { findMany } });
 
     await expect(repository.findAll()).rejects.toBe(databaseError);
+  });
+
+  it('creates a trade and maps the persisted record', async () => {
+    const create = vi
+      .fn<TradeWriteDatabase['trade']['create']>()
+      .mockResolvedValue({ ...persistedTrade, id: 'generated-id' });
+    const findMany = vi.fn<TradeWriteDatabase['trade']['findMany']>().mockResolvedValue([]);
+    const repository = new TradeRepository({ trade: { findMany, create } });
+    const input = {
+      symbol: 'AAPL',
+      quantity: 100,
+      price: 185.25,
+      side: 'BUY' as const,
+      trader: 'Alex Morgan',
+      tradeDate: '2026-10-14T12:00:00.000Z',
+      status: 'ACTIVE' as const,
+    };
+
+    await expect(repository.create(input)).resolves.toEqual({
+      id: 'generated-id',
+      ...input,
+      book: undefined,
+      counterparty: undefined,
+    });
+    expect(create).toHaveBeenCalledWith({
+      data: {
+        ...input,
+        tradeDate: new Date(input.tradeDate),
+        book: null,
+        counterparty: null,
+      },
+    });
   });
 });

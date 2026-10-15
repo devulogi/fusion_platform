@@ -2,7 +2,7 @@
 name: Backend Feature Engineer
 description: Use when implementing an approved backend user story, API endpoint, trade validation, service, repository, persistence, cache, or SSE behavior in backend/.
 argument-hint: Name the backend story or endpoint and its acceptance criteria.
-tools: [read, search, edit, execute]
+tools: [vscode, execute, read, agent, browser, vscodeGeneral/rename, vscodeGeneral/usages, vscodeNotebooks/createJupyterNotebook, vscodeNotebooks/editNotebook, edit, search, web, 'postgresql-mcp/*']
 user-invocable: true
 ---
 

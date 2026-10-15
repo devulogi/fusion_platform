@@ -23,7 +23,7 @@ Compose loads backend connection settings from `backend/.env.dev` and frontend s
 
 ### Backend Decision Analysis and Resolution
 
-**Status:** Partially implemented. The PostgreSQL trade schema and optional empty-database seeding are implemented; the REST trade API, cache, and SSE components below remain proposed.
+**Status:** Partially implemented. The PostgreSQL trade schema, setup-time seeding, collection read/create endpoints, in-memory cache, and basic `trade.created` SSE delivery are implemented. Amend/cancel workflows and robust SSE reconnect/snapshot recovery remain proposed.
 
 **Scope:** A single backend service for reading, creating, amending, and cancelling the assessment's approximately 100–1,000 trades. The API returns the complete collection; TanStack Table handles sorting and filtering in the browser. Pagination and multi-instance deployment are not assumed requirements.
 
@@ -35,15 +35,15 @@ Compose loads backend connection settings from `backend/.env.dev` and frontend s
 - Trade services own use-case coordination and business rules for creating, amending, and cancelling trades.
 - The repository owns PostgreSQL queries and transactions. PostgreSQL remains the system of record.
 - `TradeCache` owns an in-process `Map<TradeId, Trade>` used to serve the full collection after initial hydration.
-- A typed event publisher emits `trade.created`, `trade.amended`, and `trade.cancelled` after persistence and cache updates. The SSE gateway subscribes and broadcasts the changed trade to connected clients.
+- A typed event publisher emits the implemented `trade.created` event after persistence and cache update. Amend/cancel event flows remain proposed; the SSE endpoint broadcasts created events to connected clients.
 
-**Startup and read flow:** `setup.sh` applies SQL migrations and optionally seeds an empty database before starting the backend. The backend connects to PostgreSQL and loads persisted trades into the Map. `GET /api/trades` returns `Array.from(cache.values())`; it does not perform a database load on the first request. If startup hydration fails, the service must not report ready or serve an empty cache as complete. The client sorts and filters locally; the API does not add pagination by assumption.
+**Startup and read flow:** `setup.sh` applies SQL migrations and optionally seeds an empty database before starting the backend. The backend connects to PostgreSQL and loads persisted trades into the Map. `GET /api/v1/trades` returns an object containing `items` and pagination metadata for the complete collection; it does not perform a database load on each request. If startup hydration fails, the service must not report ready or serve an empty cache as complete. The client sorts and filters locally; the API does not page the collection server-side.
 
 **Mutation flow:** The controller validates the request; the service applies domain rules; the repository commits to PostgreSQL and returns the saved trade; the service then updates the Map synchronously and publishes the corresponding event. A persistence failure must leave the cache unchanged and publish no event. SSE delivery failures must not turn an already-committed HTTP mutation into a failure.
 
 **Cache trade-off:** A Map provides average O(1) lookup by trade ID, but producing the full collection remains O(n), and serialization and network payload costs remain proportional to the result. For up to 1,000 trades this is a deliberate, bounded single-process design, not a claim of sub-millisecond end-to-end reads. PostgreSQL remains authoritative; the cache is disposable and rehydrates from PostgreSQL on every startup. It is not shared across multiple backend instances.
 
-**Real-time transport:** Use Server-Sent Events because clients send commands through REST and only need server-to-client updates. SSE is receive-only by design; the assessment does not require client events over the real-time channel. WebSockets would be reconsidered if bidirectional streaming becomes a real requirement. SSE events are not durable: after reconnect, a client reloads `GET /api/trades` to reconcile missed updates. The client should establish the event stream before its initial snapshot and reconcile events received while that snapshot is loading.
+**Real-time transport:** Use Server-Sent Events because clients send commands through REST and only need server-to-client updates. SSE is receive-only by design; the assessment does not require client events over the real-time channel. WebSockets would be reconsidered if bidirectional streaming becomes a real requirement. The backend currently publishes `trade.created` to connected clients. Events are process-local and not durable; reconnect recovery and snapshot reconciliation remain future work.
 
 **Concurrency and alternatives:** Database transactions protect persistence. A `version` field with conditional updates can reject stale amendments with `409 Conflict`; include it if concurrent amendments are in scope and cover it with tests. Redis, distributed caching, and multiple services are deferred because the assessment specifies neither multi-instance scale nor a cache bottleneck. This is a single-process architecture with explicit limits, not a horizontally scaled design.
 
