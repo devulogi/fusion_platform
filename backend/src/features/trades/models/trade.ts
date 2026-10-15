@@ -14,3 +14,15 @@ export interface Trade {
   readonly book?: string;
   readonly counterparty?: string;
 }
+
+export interface CreateTradeInput {
+  readonly symbol: string;
+  readonly quantity: number;
+  readonly price: number;
+  readonly side: TradeSide;
+  readonly trader: string;
+  readonly tradeDate: string;
+  readonly status: TradeStatus;
+  readonly book?: string | null;
+  readonly counterparty?: string | null;
+}

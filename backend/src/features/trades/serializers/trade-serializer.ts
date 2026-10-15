@@ -11,16 +11,28 @@ export const tradeResponseSchema = z
     trader: z.string(),
     tradeDate: z.string().datetime(),
     status: z.enum(['ACTIVE', 'CANCELLED']),
-    book: z.string().optional(),
-    counterparty: z.string().optional(),
+    book: z.string().nullable(),
+    counterparty: z.string().nullable(),
   })
   .openapi('Trade');
 
+export const tradeCollectionPaginationSchema = z
+  .object({
+    totalItems: z.number().int().nonnegative(),
+    currentPage: z.number().int().positive(),
+    totalPages: z.number().int().nonnegative(),
+  })
+  .openapi('TradeCollectionPagination');
+
 export const tradeCollectionResponseSchema = z
-  .array(tradeResponseSchema)
-  .openapi('TradeCollection');
+  .object({
+    items: z.array(tradeResponseSchema),
+    pagination: tradeCollectionPaginationSchema,
+  })
+  .openapi('TradeCollectionResponse');
 
 export type TradeResponse = z.infer<typeof tradeResponseSchema>;
+export type TradeCollectionResponse = z.infer<typeof tradeCollectionResponseSchema>;
 
 export function serializeTrade(trade: Trade): TradeResponse {
   return tradeResponseSchema.parse({
@@ -32,7 +44,21 @@ export function serializeTrade(trade: Trade): TradeResponse {
     trader: trade.trader,
     tradeDate: trade.tradeDate,
     status: trade.status,
-    ...(trade.book === undefined ? {} : { book: trade.book }),
-    ...(trade.counterparty === undefined ? {} : { counterparty: trade.counterparty }),
+    book: trade.book ?? null,
+    counterparty: trade.counterparty ?? null,
+  });
+}
+
+export function serializeTradeCollection(trades: readonly Trade[]): TradeCollectionResponse {
+  const items = trades.map(serializeTrade);
+  const totalItems = items.length;
+
+  return tradeCollectionResponseSchema.parse({
+    items,
+    pagination: {
+      totalItems,
+      currentPage: 1,
+      totalPages: totalItems === 0 ? 0 : 1,
+    },
   });
 }

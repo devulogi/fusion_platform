@@ -4,16 +4,20 @@ import { HealthController } from './features/health/controllers/health-controlle
 import { TradeController } from './features/trades/controllers/trade-controller.ts';
 import { TradeCache } from './features/trades/trade-cache.ts';
 import { TradeRepository } from './features/trades/repositories/trade-repository.ts';
+import { TradeEventPublisher } from './features/trades/trade-event-publisher.ts';
 import { TradeService } from './features/trades/services/trade-service.ts';
+import { TradeEventsController } from './features/trades/controllers/trade-events-controller.ts';
 
 const port = Number(process.env.PORT) || 3001;
 const prisma = new PrismaClient();
 const tradeCache = new TradeCache();
 const tradeRepository = new TradeRepository(prisma);
-const tradeService = new TradeService(tradeCache);
+const tradeEventPublisher = new TradeEventPublisher();
+const tradeService = new TradeService(tradeCache, tradeRepository, tradeEventPublisher);
 const tradeController = new TradeController(tradeService);
+const tradeEventsController = new TradeEventsController(tradeEventPublisher);
 const healthController = new HealthController();
-const app = createApp({ healthController, tradeController });
+const app = createApp({ healthController, tradeController, tradeEventsController });
 
 async function start(): Promise<void> {
   await prisma.$connect();

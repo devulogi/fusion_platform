@@ -8,9 +8,11 @@ applyTo: "backend/**"
 
 ## Scope and decisions
 
-- Use `backend/USER_STORIES.md` as the source for domain behavior and acceptance criteria. Use the backend decision section in `README.md` for architecture rationale and trade-offs.
+- Use `backend/USER_STORIES.md` as the source for domain behavior and acceptance criteria. Use the backend api implementation decision `.github/skills/implement-backend-api-story/SKILL.md` for architecture rationale and trade-offs.
 - Treat both documents as proposed Phase 3 guidance, not proof that those features exist. Existing code is the authority for what is currently implemented.
 - Follow decisions the user has explicitly approved. If a story conflicts with an approved architecture decision, or either is ambiguous, explain the conflict and ask before expanding scope.
+- Variable, function/method argument, and Class name should tell what it holds or represent; Avoid magic numbers or magic string.
+- Function and or Method name should express what action it perform.
 - Avoid mutating shared or critical state directly; always work with copies or persistent data structures.
 - Keep functions thin, testable, readable to lighten cognitive load, and ensure logic is grouped and organized.
 - Write tests before implementing functionality to ensure correctness based on the user stories and acceptance criteria.
@@ -18,6 +20,7 @@ applyTo: "backend/**"
 - Use `it` blocks for individual test cases, clearly stating the expected behavior in the test description.
 - Prefer `beforeEach` and `afterEach` hooks for setup and teardown to keep tests isolated and reduce duplication.
 - Follow test driven development (TDD) practices (red green refactor cycle: write a failing test, implement functionality to pass the test, then refactor for maintainability and scalability).
+- Treat caught values as `unknown` and narrow them before accessing error-specific properties. Catch failures near their source when that layer can add service/operation context, clean up, recover, or translate them; preserve the original cause when normalizing an error. Forward normalized request errors to the central Express error handler. Handle startup failures at the startup boundary because no request is active yet. Do not catch and rethrow an unchanged error.
 - Keep the take-home solution proportionate: do not introduce pagination, Redis, microservices, multi-instance guarantees, durable event replay, or extra abstractions without an approved requirement.
 
 ## TypeScript and API boundaries
@@ -32,9 +35,9 @@ applyTo: "backend/**"
 
 ## HTTP API Documentation
 
-- Every change that adds or changes an HTTP API endpoint must update `backend/openapi.yaml` in the same change. Document the implemented method and path, parameters, request and response schemas, validation/error responses, and relevant status codes.
+- Every change that adds or changes an HTTP API endpoint must update `backend/src/api-contract.ts`, the source used to generate the OpenAPI document, and its tests in the same change. `backend/src/api-docs.ts` serves the generated document. Document the implemented method and path, parameters, request and response schemas, validation/error responses, and relevant status codes.
 - Keep the OpenAPI document limited to implemented behavior; do not describe proposed or planned routes as available.
-- An OpenAPI file is not a browsable documentation endpoint. When Swagger UI is part of the approved scope, serve it from the backend at `/api-docs` on the existing API port and keep it synchronized with the specification. Do not claim Swagger UI is available unless the route is mounted and tested.
+- Swagger UI is served by the backend at `/api-docs` on the existing API port. Keep it synchronized with `api-contract.ts` and its tests; do not describe proposed routes as implemented.
 
 ## Persistence, cache, and events
 
