@@ -1,12 +1,12 @@
 # Backend User Stories
 
-**Status:** Partially implemented. Story 1's trade schema and optional setup-time SQL seeding are implemented; the other stories remain proposed.
+**Status:** Stories 1, 2, and 4 are implemented. Story 7 is partially implemented; Stories 3, 5, 6, 8, and 9 remain proposed.
 
-These stories translate the take-home requirements into backend behavior. Endpoint paths and business rules below are proposals to confirm during implementation, not claims about the current API.
+These stories translate the take-home requirements into backend behavior. Implemented stories describe current behavior; paths and business rules in proposed stories are not claims about available API behavior.
 
 ## Scope and Assumptions
 
-- The API returns the full trade collection, expected to contain approximately 100–1,000 records. Sorting and filtering are client-side; pagination is not assumed.
+- The API returns the full trade collection, expected to contain approximately 100–1,000 records. Sorting and filtering are client-side. The response includes metadata for the complete collection; server-side paging is not assumed.
 - PostgreSQL is the system of record. A process-local `Map<TradeId, Trade>` is a disposable read cache and is hydrated from the database.
 - Clients send create, amend, and cancel commands through REST. Server-to-client changes are delivered over SSE.
 - The persisted trade contract uses the assessment's required fields: ID, symbol, side, quantity, price, trader, trade date, and status. Book and counterparty are optional sample-data fields.
@@ -31,17 +31,17 @@ As a reviewer, I want realistic sample trades when starting with an empty databa
 
 ### 2. View the trade collection
 
-**Status:** In-Progress
+**Status:** Implemented
 
 As a blotter user, I want to retrieve the current trades so the frontend can display, sort, and filter them.
 
 **Acceptance criteria**
 
-- `GET /api/trades` returns the complete collection with HTTP `200`.
+- `GET /api/v1/trades` returns `{ items, pagination }` with HTTP `200`; it returns the complete collection in one response without server-side paging.
 - Before the API reports ready, startup loads the persisted collection from PostgreSQL and populates the cache.
 - A request is not served from an uninitialized or partially populated cache.
-- Once ready, `GET /api/trades` returns the complete in-memory collection without a database read.
-- An empty database returns an empty array unless the optional seed-on-empty behavior is enabled.
+- Once ready, `GET /api/v1/trades` returns the complete in-memory collection without a database read.
+- A successfully loaded empty database returns `{ items: [], pagination: { totalItems: 0, currentPage: 1, totalPages: 0 } }` unless optional seed-on-empty behavior populates it.
 - Database or hydration failure prevents the service from reporting ready; it retries according to the startup policy or exits for the container restart policy.
 
 ### 3. Check backend readiness
@@ -57,16 +57,20 @@ As a developer, I want to know whether the backend and its database dependency a
 
 ### 4. Create a trade
 
+**Status:** Implemented
+
 As a trader, I want to create a trade so it is persisted and visible to all connected blotter users.
 
 **Acceptance criteria**
 
-- `POST /api/trades` validates the request before persistence.
+- `POST /api/v1/trades` validates the request before persistence.
 - Required fields are present; quantity and price are positive; side and status use supported values.
-- The backend assigns or validates a unique trade ID according to the finalized schema.
-- A successful request persists the trade, updates the cache, emits `trade.created`, and returns the saved trade with HTTP `201`.
-- A validation failure returns HTTP `400` and changes neither persistence, cache, nor event stream.
+- Prisma generates the unique trade ID; `status` is required and must be `ACTIVE` or `CANCELLED`.
+- A successful request persists the trade, updates the cache, emits `trade.created` using SSE, and returns the saved trade with HTTP `201`.
+- A validation failure returns HTTP `400` with the structured error envelope and changes neither persistence, cache, nor event stream.
 - A persistence failure does not update the cache or emit an event.
+
+**Implementation:** The POST route validates input with Zod. The repository persists through Prisma and returns the canonical saved trade; the service updates the cache, then publishes `trade.created`; the controller returns the serialized trade with HTTP `201`. Omitted optional `book` and `counterparty` fields are represented as `null` in the response.
 
 ### 5. Amend a trade
 
@@ -74,7 +78,7 @@ As a trader, I want to amend an existing trade so corrections are reflected in t
 
 **Acceptance criteria**
 
-- `PATCH /api/trades/:tradeId` validates the permitted amendment fields.
+- `PATCH /api/v1/trades/:tradeId` validates the permitted amendment fields.
 - A valid amendment is persisted first, then the saved trade replaces the cached entry, then `trade.amended` is emitted.
 - The response contains the persisted trade.
 - An unknown trade returns HTTP `404`; invalid fields return HTTP `400`.
@@ -95,17 +99,21 @@ As a trader, I want to cancel an active trade without deleting its record, so th
 
 ### 7. Receive live trade updates
 
+**Status:** Partially implemented
+
 As a connected blotter user, I want other users' committed trade changes pushed to my browser without refreshing the page.
 
 **Acceptance criteria**
 
-- `GET /api/events` opens an SSE stream with the correct `text/event-stream` content type.
+- `GET /api/v1/events` opens an SSE stream with the correct `text/event-stream` content type.
 - The server sends named `trade.created`, `trade.amended`, and `trade.cancelled` events containing the canonical saved trade.
 - The event publisher runs only after a successful database mutation and cache update.
 - A disconnected client is removed from active subscribers and can reconnect.
-- Events are process-local and not durable. After reconnect, the client reloads `GET /api/trades` to reconcile missed events.
+- Events are process-local and not durable. After reconnect, the client reloads `GET /api/v1/trades` to reconcile missed events.
 - The client opens the event stream before fetching its initial snapshot and reconciles events received during that fetch, avoiding a snapshot/subscribe gap.
 - SSE delivery errors do not roll back committed data or change the successful REST response.
+
+**Implementation to date:** `GET /api/v1/events` streams `trade.created`. Amend/cancel event types, reconnect recovery, and snapshot reconciliation remain proposed.
 
 ### 8. Explore the API contract
 

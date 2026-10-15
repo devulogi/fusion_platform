@@ -1,25 +1,40 @@
 import type { Trade, TradeId } from './models/trade.ts';
 
+export class TradeCacheNotHydratedError extends Error {
+  constructor() {
+    super('Trade cache has not been hydrated');
+    this.name = 'TradeCacheNotHydratedError';
+  }
+}
+
 export class TradeCache {
   private tradesById = new Map<TradeId, Trade>();
   private hydrated = false;
 
   hydrate(trades: readonly Trade[]): void {
-    const nextTradesById = new Map<TradeId, Trade>();
+    const hydratedTradesById = new Map<TradeId, Trade>();
 
     for (const trade of trades) {
-      nextTradesById.set(trade.id, { ...trade });
+      hydratedTradesById.set(trade.id, { ...trade });
     }
 
-    this.tradesById = nextTradesById;
+    this.tradesById = hydratedTradesById;
     this.hydrated = true;
   }
 
-  getAll(): readonly Trade[] | undefined {
-    if (!this.hydrated) {
-      return undefined;
-    }
+  add(trade: Trade): void {
+    this.assertHydrated();
+    this.tradesById.set(trade.id, { ...trade });
+  }
 
+  getAll(): readonly Trade[] {
+    this.assertHydrated();
     return Array.from(this.tradesById.values());
+  }
+
+  assertHydrated(): void {
+    if (!this.hydrated) {
+      throw new TradeCacheNotHydratedError();
+    }
   }
 }
