@@ -11,12 +11,7 @@ import {
 } from './features/trades/serializers/trade-serializer.ts';
 import { createTradeRequestSchema } from './features/trades/controllers/trade-controller.ts';
 import { z } from './openapi/zod.ts';
-
-export const ApiPath = {
-  health: '/health',
-  trades: '/api/v1/trades',
-  tradeEvents: '/api/v1/events',
-} as const;
+import { ApiPath, HttpStatus } from './constants.ts';
 
 const registry = new OpenAPIRegistry();
 
@@ -34,7 +29,7 @@ registry.registerPath({
     },
   },
   responses: {
-    201: {
+    [HttpStatus.CREATED]: {
       description: 'Trade created',
       content: {
         'application/json': {
@@ -42,7 +37,7 @@ registry.registerPath({
         },
       },
     },
-    400: {
+    [HttpStatus.BAD_REQUEST]: {
       description: 'Request validation failed',
       content: {
         'application/json': {
@@ -50,7 +45,7 @@ registry.registerPath({
         },
       },
     },
-    500: {
+    [HttpStatus.INTERNAL_SERVER_ERROR]: {
       description: 'Unexpected server error',
       content: {
         'application/json': {
@@ -66,7 +61,7 @@ registry.registerPath({
   path: ApiPath.tradeEvents,
   summary: 'Subscribe to trade events',
   responses: {
-    200: {
+    [HttpStatus.OK]: {
       description: 'Server-sent trade events',
       content: {
         'text/event-stream': {
@@ -82,7 +77,7 @@ registry.registerPath({
   path: ApiPath.health,
   summary: 'Check backend liveness',
   responses: {
-    200: {
+    [HttpStatus.OK]: {
       description: 'Backend process is running',
       content: {
         'application/json': {
@@ -90,7 +85,7 @@ registry.registerPath({
         },
       },
     },
-    500: {
+    [HttpStatus.INTERNAL_SERVER_ERROR]: {
       description: 'Unexpected server error',
       content: {
         'application/json': {
@@ -106,7 +101,7 @@ registry.registerPath({
   path: ApiPath.trades,
   summary: 'List all trades',
   responses: {
-    200: {
+    [HttpStatus.OK]: {
       description: 'Complete trade collection',
       content: {
         'application/json': {
@@ -114,7 +109,7 @@ registry.registerPath({
         },
       },
     },
-    503: {
+    [HttpStatus.SERVICE_UNAVAILABLE]: {
       description: 'Trade collection is not ready',
       content: {
         'application/json': {
@@ -122,7 +117,7 @@ registry.registerPath({
         },
       },
     },
-    500: {
+    [HttpStatus.INTERNAL_SERVER_ERROR]: {
       description: 'Unexpected server error',
       content: {
         'application/json': {

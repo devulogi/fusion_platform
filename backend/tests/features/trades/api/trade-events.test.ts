@@ -1,7 +1,7 @@
 import { get, type IncomingMessage } from 'node:http';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../../../../src/app.ts';
-import { ApiPath } from '../../../../src/api-contract.ts';
+import { ApiPath } from '../../../../src/constants.ts';
 import { HealthController } from '../../../../src/features/health/controllers/health-controller.ts';
 import { TradeController } from '../../../../src/features/trades/controllers/trade-controller.ts';
 import { TradeEventsController } from '../../../../src/features/trades/controllers/trade-events-controller.ts';
