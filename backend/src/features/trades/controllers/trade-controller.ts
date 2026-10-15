@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 import { TradeService } from '../services/trade-service.ts';
 import { serializeTrade, serializeTradeCollection } from '../serializers/trade-serializer.ts';
-import { HttpStatus } from '../../../constants.ts';
+import { HttpStatus } from '../../../http/constants.ts';
 import { parseCreateTradeInput } from '../trade-input.ts';
 
 export class TradeController {

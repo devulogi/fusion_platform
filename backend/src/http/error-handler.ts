@@ -1,6 +1,6 @@
 import type { ErrorRequestHandler } from 'express';
-import { TradeInputValidationError } from './features/trades/trade-input.ts';
-import { TradeCacheNotHydratedError } from './features/trades/trade-cache.ts';
+import { TradeInputValidationError } from '../features/trades/trade-input.ts';
+import { TradeCacheNotHydratedError } from '../features/trades/trade-cache.ts';
 import {
   internalServerErrorMessage,
   internalServerErrorSchema,

@@ -29,6 +29,8 @@ Compose loads backend connection settings from `backend/.env.dev` and frontend s
 
 **Decision:** Keep the backend as one deployable service with clear internal components: HTTP controllers, trade services, a PostgreSQL repository, an in-process trade cache, and an event publisher feeding an SSE gateway. “One service” describes the deployment boundary; the internal components keep responsibilities testable without introducing microservices.
 
+**Source organization:** `backend/src/app.ts` configures Express and `backend/src/server.ts` wires dependencies and manages process startup. Business capabilities live under `backend/src/features/`, including their controllers, services, repositories, and supporting helpers. Shared HTTP errors, middleware, tracing, and constants live under `backend/src/http/`; OpenAPI contracts, documentation routes, and Zod integration are grouped under `backend/src/http/openapi/`.
+
 **Responsibilities:**
 
 - Controllers parse HTTP input, validate request schemas with Zod, call a service, and map outcomes to HTTP responses.

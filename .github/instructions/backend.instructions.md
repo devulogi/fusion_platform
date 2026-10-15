@@ -23,6 +23,7 @@ applyTo: "backend/**"
 - Introduce supporting components only when they have a distinct responsibility; do not make them mandatory layers or create abstractions by default.
 - Maintain a feature-first structure under `backend/src/features/<feature>/`: group code by the business capability it serves, with any needed `controllers/`, `services/`, and `repositories/` inside that feature. Do not organize the application as top-level layer folders or require empty/template-matching folders. Keep feature-specific supporting components with their feature.
 - Keep HTTP application setup separate from process startup and resource lifecycle. Configure Express in `backend/src/app.ts`; wire dependencies explicitly and manage startup/shutdown in `backend/src/server.ts`, keeping feature logic out of setup code. Extract shared infrastructure only when genuinely needed across features; do not require a DI container or additional composition layers.
+- Group shared HTTP concerns in `backend/src/http/`, with API documentation and schema-generation helpers in `http/openapi/`. Keep feature-specific helpers inside their feature; do not create a separate folder for every file.
 - Keep functions focused, testable, and readable; avoid unnecessary shared-state mutation.
 
 ## Controller design
@@ -66,7 +67,7 @@ applyTo: "backend/**"
 
 ## HTTP API Documentation
 
-- Every change that adds or changes an HTTP API endpoint must update `backend/src/api-contract.ts`, the source used to generate the OpenAPI document, and its tests in the same change. `backend/src/api-docs.ts` serves the generated document. Document the implemented method and path, parameters, request and response schemas, validation/error responses, and relevant status codes.
+- Every change that adds or changes an HTTP API endpoint must update `backend/src/http/openapi/api-contract.ts`, the source used to generate the OpenAPI document, and its tests in the same change. `backend/src/http/openapi/api-docs.ts` serves the generated document. Document the implemented method and path, parameters, request and response schemas, validation/error responses, and relevant status codes.
 - Document implemented behavior only; do not describe proposed or planned routes as available.
 
 ## HTTP API response design

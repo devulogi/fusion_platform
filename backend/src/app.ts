@@ -1,14 +1,14 @@
 import express from 'express';
-import apiDocsRouter from './api-docs.ts';
-import { ApiPath } from './constants.ts';
-import { createErrorHandler } from './error-handler.ts';
-import { RouteNotFoundError } from './api-errors.ts';
+import apiDocsRouter from './http/openapi/api-docs.ts';
+import { ApiPath } from './http/constants.ts';
+import { createErrorHandler } from './http/error-handler.ts';
+import { RouteNotFoundError } from './http/api-errors.ts';
 import {
   defaultRequestLogger,
   recordRequestRoute,
   requestContext,
   type RequestLogger,
-} from './request-context.ts';
+} from './http/request-context.ts';
 import { tradeRouter } from './features/trades/trade-router.ts';
 import { HealthController } from './features/health/controllers/health-controller.ts';
 import { TradeController } from './features/trades/controllers/trade-controller.ts';

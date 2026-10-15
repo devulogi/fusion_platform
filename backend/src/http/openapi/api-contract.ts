@@ -3,16 +3,16 @@ import {
   internalServerErrorSchema,
   tradeCollectionNotReadySchema,
   validationErrorSchema,
-} from './api-errors.ts';
-import { healthResponseSchema } from './features/health/controllers/health-controller.ts';
+} from '../api-errors.ts';
+import { healthResponseSchema } from '../../features/health/controllers/health-controller.ts';
 import {
   tradeCollectionResponseSchema,
   tradeResponseSchema,
-} from './features/trades/serializers/trade-serializer.ts';
-import { createTradeInputSchema } from './features/trades/trade-input.ts';
-import { requestIdHeader, requestIdResponseHeader } from './request-context.ts';
-import { z } from './openapi/zod.ts';
-import { ApiPath, HttpStatus } from './constants.ts';
+} from '../../features/trades/serializers/trade-serializer.ts';
+import { createTradeInputSchema } from '../../features/trades/trade-input.ts';
+import { requestIdHeader, requestIdResponseHeader } from '../request-context.ts';
+import { z } from './zod.ts';
+import { ApiPath, HttpStatus } from '../constants.ts';
 
 const registry = new OpenAPIRegistry();
 
