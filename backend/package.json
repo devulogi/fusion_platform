@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --env-file=.env.dev ./node_modules/prisma/build/index.js generate && node --env-file=.env.dev ./node_modules/tsx/dist/cli.mjs watch src/server.ts",
-    "debug": "node --inspect=0.0.0.0:9229 --env-file=.env.dev --import tsx src/server.ts",
+    "debug": "node --watch --inspect=0.0.0.0:9229 --env-file=.env.dev --import tsx src/server.ts",
     "build": "prisma generate && tsc",
     "start": "node dist/server.js",
     "db:generate": "prisma generate",
