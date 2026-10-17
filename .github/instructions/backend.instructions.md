@@ -6,12 +6,11 @@ applyTo: "backend/**"
 
 # Backend Engineering Instructions
 
-## Scope and decisions
+## Document ownership
 
-- Use `backend/USER_STORIES.md` for approved domain behavior and acceptance criteria. Existing code is the authority on what is implemented; a story or design document describes intended work, not proof of implementation.
-- Follow decisions the user has approved. If requirements conflict or leave a material behavior unresolved, raise it before expanding scope or choosing a behavior.
-- For the API-story workflow, see `.github/skills/implement-backend-api-story/SKILL.md`.
-- Keep backend changes proportionate to approved requirements. Do not introduce pagination, Redis, microservices, multi-instance guarantees, durable event replay, or extra abstractions without approval.
+- This file owns shared backend architecture and engineering standards; it does not define the implementation role, story scope, or implementation cycle.
+- The backend feature engineer agent owns backend story scope, out-of-scope decisions, and the implementation cycle. Use `backend/USER_STORIES.md` as the source for story status and acceptance criteria.
+- For API-story tool-selection guidance, see `.github/skills/implement-backend-api-story/SKILL.md`. The skill recommends tools but does not grant access.
 
 ## Architecture and implementation
 

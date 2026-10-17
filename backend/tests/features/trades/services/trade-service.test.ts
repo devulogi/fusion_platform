@@ -16,6 +16,7 @@ const unusedTradeRepository: TradeRepositoryContract = {
   findAll: () => Promise.resolve([]),
   create: () => Promise.reject(new Error('Trade creation not configured for this test')),
   amend: () => Promise.reject(new Error('Trade amendment not configured for this test')),
+  cancel: () => Promise.reject(new Error('Trade cancellation not configured for this test')),
 };
 
 describe('TradeService', () => {
@@ -69,6 +70,7 @@ describe('TradeService', () => {
         return Promise.resolve(savedTrade);
       },
       amend: () => Promise.reject(new Error('Not used in create test')),
+      cancel: () => Promise.reject(new Error('Not used in create test')),
     };
     const tradeEventPublisher = {
       publishTradeCreated: (trade: Trade) => {
@@ -77,6 +79,7 @@ describe('TradeService', () => {
         operationOrder.push('publish');
       },
       publishTradeAmended: () => undefined,
+      publishTradeCancelled: () => undefined,
     };
     const service = new TradeService(tradeCache, tradeRepository, tradeEventPublisher);
 
@@ -93,12 +96,14 @@ describe('TradeService', () => {
       findAll: () => Promise.resolve([]),
       create: () => Promise.reject(persistenceError),
       amend: () => Promise.reject(new Error('Not used in create test')),
+      cancel: () => Promise.reject(new Error('Not used in create test')),
     };
     const tradeEventPublisher = {
       publishTradeCreated: () => {
         eventPublished = true;
       },
       publishTradeAmended: () => undefined,
+      publishTradeCancelled: () => undefined,
     };
     const service = new TradeService(tradeCache, tradeRepository, tradeEventPublisher);
 
@@ -126,6 +131,7 @@ describe('TradeService', () => {
         return Promise.reject(new Error('Should not persist before hydration'));
       },
       amend: () => Promise.reject(new Error('Not used in create test')),
+      cancel: () => Promise.reject(new Error('Not used in create test')),
     };
     const service = new TradeService(new TradeCache(), tradeRepository, new TradeEventPublisher());
 
@@ -168,6 +174,7 @@ describe('TradeService', () => {
         operationOrder.push('persist');
         return Promise.resolve(savedTrade);
       },
+      cancel: () => Promise.reject(new Error('Not used in amend test')),
     };
     const publisher = {
       publishTradeCreated: () => undefined,
@@ -176,6 +183,7 @@ describe('TradeService', () => {
         expect(tradeCache.getAll()).toEqual([savedTrade]);
         operationOrder.push('publish');
       },
+      publishTradeCancelled: () => undefined,
     };
     const service = new TradeService(tradeCache, tradeRepository, publisher);
 
@@ -202,12 +210,14 @@ describe('TradeService', () => {
       findAll: () => Promise.resolve([]),
       create: () => Promise.reject(new Error('Not used in amend test')),
       amend: () => Promise.reject(persistenceError),
+      cancel: () => Promise.reject(new Error('Not used in amend test')),
     };
     const publisher = {
       publishTradeCreated: () => undefined,
       publishTradeAmended: () => {
         eventPublished = true;
       },
+      publishTradeCancelled: () => undefined,
     };
     const service = new TradeService(tradeCache, tradeRepository, publisher);
 
@@ -218,6 +228,116 @@ describe('TradeService', () => {
     expect(eventPublished).toBe(false);
   });
 
+  it('persists cancellation, replaces the cache, then publishes the saved trade', async () => {
+    const activeTrade: Trade = {
+      id: 'trade-1',
+      symbol: 'AAPL',
+      quantity: 100,
+      price: 185.25,
+      side: 'BUY',
+      trader: 'Alex Morgan',
+      tradeDate: '2026-10-14T12:00:00.000Z',
+      status: 'ACTIVE',
+    };
+    const cancelledTrade: Trade = { ...activeTrade, status: 'CANCELLED' };
+    const tradeCache = new TradeCache();
+    tradeCache.hydrate([activeTrade]);
+    const operationOrder: string[] = [];
+    const repository: TradeRepositoryContract = {
+      findAll: () => Promise.resolve([]),
+      create: () => Promise.reject(new Error('Not used in cancellation test')),
+      amend: () => Promise.reject(new Error('Not used in cancellation test')),
+      cancel: vi.fn<TradeRepositoryContract['cancel']>().mockImplementation(() => {
+        operationOrder.push('persist');
+        return Promise.resolve({ trade: cancelledTrade, changed: true });
+      }),
+    };
+    const publisher = {
+      publishTradeCreated: () => undefined,
+      publishTradeAmended: () => undefined,
+      publishTradeCancelled: (trade: Trade) => {
+        expect(trade).toEqual(cancelledTrade);
+        expect(tradeCache.getAll()).toEqual([cancelledTrade]);
+        operationOrder.push('publish');
+      },
+    };
+    const service = new TradeService(tradeCache, repository, publisher);
+
+    await expect(service.cancelTrade(activeTrade.id, { status: 'CANCELLED' })).resolves.toEqual(
+      cancelledTrade,
+    );
+    expect(operationOrder).toEqual(['persist', 'publish']);
+  });
+
+  it('updates the cache but does not publish when cancellation is repeated', async () => {
+    const activeTrade: Trade = {
+      id: 'trade-1',
+      symbol: 'AAPL',
+      quantity: 100,
+      price: 185.25,
+      side: 'BUY',
+      trader: 'Alex Morgan',
+      tradeDate: '2026-10-14T12:00:00.000Z',
+      status: 'ACTIVE',
+    };
+    const cancelledTrade: Trade = { ...activeTrade, status: 'CANCELLED' };
+    const tradeCache = new TradeCache();
+    tradeCache.hydrate([activeTrade]);
+    const publishTradeCancelled = vi.fn();
+    const repository: TradeRepositoryContract = {
+      findAll: () => Promise.resolve([]),
+      create: () => Promise.reject(new Error('Not used in cancellation test')),
+      amend: () => Promise.reject(new Error('Not used in cancellation test')),
+      cancel: () => Promise.resolve({ trade: cancelledTrade, changed: false }),
+    };
+    const publisher = {
+      publishTradeCreated: () => undefined,
+      publishTradeAmended: () => undefined,
+      publishTradeCancelled,
+    };
+    const service = new TradeService(tradeCache, repository, publisher);
+
+    await expect(service.cancelTrade(activeTrade.id, { status: 'CANCELLED' })).resolves.toEqual(
+      cancelledTrade,
+    );
+    expect(tradeCache.getAll()).toEqual([cancelledTrade]);
+    expect(publishTradeCancelled).not.toHaveBeenCalled();
+  });
+
+  it('does not update the cache or publish when cancellation persistence fails', async () => {
+    const activeTrade: Trade = {
+      id: 'trade-1',
+      symbol: 'AAPL',
+      quantity: 100,
+      price: 185.25,
+      side: 'BUY',
+      trader: 'Alex Morgan',
+      tradeDate: '2026-10-14T12:00:00.000Z',
+      status: 'ACTIVE',
+    };
+    const tradeCache = new TradeCache();
+    tradeCache.hydrate([activeTrade]);
+    const persistenceError = new Error('Database unavailable');
+    const publishTradeCancelled = vi.fn();
+    const repository: TradeRepositoryContract = {
+      findAll: () => Promise.resolve([]),
+      create: () => Promise.reject(new Error('Not used in cancellation test')),
+      amend: () => Promise.reject(new Error('Not used in cancellation test')),
+      cancel: () => Promise.reject(persistenceError),
+    };
+    const service = new TradeService(tradeCache, repository, {
+      publishTradeCreated: () => undefined,
+      publishTradeAmended: () => undefined,
+      publishTradeCancelled,
+    });
+
+    await expect(service.cancelTrade(activeTrade.id, { status: 'CANCELLED' })).rejects.toBe(
+      persistenceError,
+    );
+    expect(tradeCache.getAll()).toEqual([activeTrade]);
+    expect(publishTradeCancelled).not.toHaveBeenCalled();
+  });
+
   it('validates service input before accessing state or dependencies', async () => {
     const create = vi.fn<TradeRepositoryContract['create']>();
     const service = new TradeService(
@@ -226,6 +346,7 @@ describe('TradeService', () => {
         findAll: () => Promise.resolve([]),
         create,
         amend: () => Promise.reject(new Error('Not used in validation test')),
+        cancel: () => Promise.reject(new Error('Not used in validation test')),
       },
       new TradeEventPublisher(),
     );
@@ -264,6 +385,7 @@ describe('TradeService', () => {
         findAll: () => Promise.resolve([]),
         create,
         amend: () => Promise.reject(new Error('Not used in create test')),
+        cancel: () => Promise.reject(new Error('Not used in create test')),
       },
       new TradeEventPublisher(),
     );
