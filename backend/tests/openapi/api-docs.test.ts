@@ -23,6 +23,8 @@ const app = createApp({
         trade: {
           findMany: () => Promise.resolve([]),
           create: () => Promise.reject(new Error('Not used in API docs tests')),
+          findUnique: () => Promise.resolve(null),
+          update: () => Promise.reject(new Error('Not used in API docs tests')),
         },
       }),
       tradeEventPublisher,
@@ -50,7 +52,7 @@ describe('API documentation', () => {
     const document = parseDocument(response.text);
     const { paths } = z.object({ paths: z.record(z.unknown()) }).parse(document.toJS());
     expect(Object.keys(paths).sort()).toEqual(
-      [ApiPath.health, ApiPath.trades, ApiPath.tradeEvents].sort(),
+      [ApiPath.health, ApiPath.trades, ApiPath.tradeEvents, `${ApiPath.trades}/{tradeId}`].sort(),
     );
     expect(document.toJS()).toMatchObject({
       servers: [{ url: '/' }],
@@ -59,18 +61,18 @@ describe('API documentation', () => {
           get: { operationId: 'listTrades' },
           post: { operationId: 'createTrade' },
         },
+        [`${ApiPath.trades}/{tradeId}`]: { patch: { operationId: 'amendTrade' } },
         [ApiPath.health]: { get: { operationId: 'checkLiveness' } },
         [ApiPath.tradeEvents]: { get: { operationId: 'subscribeTradeEvents' } },
       },
     });
-    expect(document.getIn(['paths', ApiPath.trades, 'patch'])).toBeUndefined();
-    expect(document.getIn(['paths', '/api/v1/trades/{tradeId}'])).toBeUndefined();
     expect(document.getIn(['paths', '/ready'])).toBeUndefined();
 
     const description = z
       .string()
       .parse(document.getIn(['paths', ApiPath.tradeEvents, 'get', 'description']));
     expect(description).toContain('trade.created');
+    expect(description).toContain('trade.amended');
     expect(description).toContain('Last-Event-ID');
     expect(description).toContain('not implemented');
     expect(description).toContain('3000');
@@ -86,7 +88,9 @@ describe('API documentation', () => {
           '200',
           'content',
           'text/event-stream',
-          'example',
+          'examples',
+          'created',
+          'value',
         ]),
       );
     expect(example).toMatch(/^retry: 3000\n\nevent: trade.created\ndata: /);
@@ -124,6 +128,21 @@ describe('API documentation', () => {
     expect(document.getIn(['paths', ApiPath.trades, 'post', 'responses', '400'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'post', 'responses', '503'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'post', 'responses', '500'])).toBeDefined();
+    expect(
+      document.getIn(['paths', `${ApiPath.trades}/{tradeId}`, 'patch', 'requestBody']),
+    ).toBeDefined();
+    expect(
+      document.getIn(['paths', `${ApiPath.trades}/{tradeId}`, 'patch', 'responses', '200']),
+    ).toBeDefined();
+    expect(
+      document.getIn(['paths', `${ApiPath.trades}/{tradeId}`, 'patch', 'responses', '400']),
+    ).toBeDefined();
+    expect(
+      document.getIn(['paths', `${ApiPath.trades}/{tradeId}`, 'patch', 'responses', '404']),
+    ).toBeDefined();
+    expect(
+      document.getIn(['paths', `${ApiPath.trades}/{tradeId}`, 'patch', 'responses', '409']),
+    ).toBeDefined();
     expect(
       document.getIn([
         'paths',

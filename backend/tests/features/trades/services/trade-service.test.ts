@@ -3,7 +3,11 @@ import {
   TradeCache,
   TradeCacheNotHydratedError,
 } from '../../../../src/features/trades/trade-cache.ts';
-import type { CreateTradeInput, Trade } from '../../../../src/features/trades/models/trade.ts';
+import type {
+  AmendTradeInput,
+  CreateTradeInput,
+  Trade,
+} from '../../../../src/features/trades/models/trade.ts';
 import type { TradeRepositoryContract } from '../../../../src/features/trades/repositories/trade-repository.ts';
 import { TradeEventPublisher } from '../../../../src/features/trades/trade-event-publisher.ts';
 import { TradeService } from '../../../../src/features/trades/services/trade-service.ts';
@@ -11,6 +15,7 @@ import { TradeService } from '../../../../src/features/trades/services/trade-ser
 const unusedTradeRepository: TradeRepositoryContract = {
   findAll: () => Promise.resolve([]),
   create: () => Promise.reject(new Error('Trade creation not configured for this test')),
+  amend: () => Promise.reject(new Error('Trade amendment not configured for this test')),
 };
 
 describe('TradeService', () => {
@@ -63,6 +68,7 @@ describe('TradeService', () => {
         operationOrder.push('persist');
         return Promise.resolve(savedTrade);
       },
+      amend: () => Promise.reject(new Error('Not used in create test')),
     };
     const tradeEventPublisher = {
       publishTradeCreated: (trade: Trade) => {
@@ -70,6 +76,7 @@ describe('TradeService', () => {
         expect(tradeCache.getAll()).toEqual([savedTrade]);
         operationOrder.push('publish');
       },
+      publishTradeAmended: () => undefined,
     };
     const service = new TradeService(tradeCache, tradeRepository, tradeEventPublisher);
 
@@ -85,11 +92,13 @@ describe('TradeService', () => {
     const tradeRepository = {
       findAll: () => Promise.resolve([]),
       create: () => Promise.reject(persistenceError),
+      amend: () => Promise.reject(new Error('Not used in create test')),
     };
     const tradeEventPublisher = {
       publishTradeCreated: () => {
         eventPublished = true;
       },
+      publishTradeAmended: () => undefined,
     };
     const service = new TradeService(tradeCache, tradeRepository, tradeEventPublisher);
 
@@ -116,6 +125,7 @@ describe('TradeService', () => {
         repositoryCallCount += 1;
         return Promise.reject(new Error('Should not persist before hydration'));
       },
+      amend: () => Promise.reject(new Error('Not used in create test')),
     };
     const service = new TradeService(new TradeCache(), tradeRepository, new TradeEventPublisher());
 
@@ -133,11 +143,90 @@ describe('TradeService', () => {
     expect(repositoryCallCount).toBe(0);
   });
 
+  it('persists an amendment, replaces the cache, then publishes the saved trade', async () => {
+    const tradeCache = new TradeCache();
+    const existingTrade: Trade = {
+      id: 'trade-1',
+      symbol: 'AAPL',
+      quantity: 100,
+      price: 185.25,
+      side: 'BUY',
+      trader: 'Alex Morgan',
+      tradeDate: '2026-10-14T12:00:00.000Z',
+      status: 'ACTIVE',
+    };
+    tradeCache.hydrate([existingTrade]);
+    const input: AmendTradeInput = { symbol: 'MSFT', book: null };
+    const savedTrade: Trade = { ...existingTrade, symbol: 'MSFT' };
+    const operationOrder: string[] = [];
+    const tradeRepository: TradeRepositoryContract = {
+      findAll: () => Promise.resolve([]),
+      create: () => Promise.reject(new Error('Not used in amend test')),
+      amend: (tradeId, amendInput) => {
+        expect(tradeId).toBe(existingTrade.id);
+        expect(amendInput).toEqual(input);
+        operationOrder.push('persist');
+        return Promise.resolve(savedTrade);
+      },
+    };
+    const publisher = {
+      publishTradeCreated: () => undefined,
+      publishTradeAmended: (trade: Trade) => {
+        expect(trade).toEqual(savedTrade);
+        expect(tradeCache.getAll()).toEqual([savedTrade]);
+        operationOrder.push('publish');
+      },
+    };
+    const service = new TradeService(tradeCache, tradeRepository, publisher);
+
+    await expect(service.amendTrade(existingTrade.id, input)).resolves.toEqual(savedTrade);
+    expect(operationOrder).toEqual(['persist', 'publish']);
+  });
+
+  it('does not replace the cache or publish when amendment persistence fails', async () => {
+    const existingTrade: Trade = {
+      id: 'trade-1',
+      symbol: 'AAPL',
+      quantity: 100,
+      price: 185.25,
+      side: 'BUY',
+      trader: 'Alex Morgan',
+      tradeDate: '2026-10-14T12:00:00.000Z',
+      status: 'ACTIVE',
+    };
+    const tradeCache = new TradeCache();
+    tradeCache.hydrate([existingTrade]);
+    const persistenceError = new Error('Database unavailable');
+    let eventPublished = false;
+    const tradeRepository: TradeRepositoryContract = {
+      findAll: () => Promise.resolve([]),
+      create: () => Promise.reject(new Error('Not used in amend test')),
+      amend: () => Promise.reject(persistenceError),
+    };
+    const publisher = {
+      publishTradeCreated: () => undefined,
+      publishTradeAmended: () => {
+        eventPublished = true;
+      },
+    };
+    const service = new TradeService(tradeCache, tradeRepository, publisher);
+
+    await expect(service.amendTrade(existingTrade.id, { symbol: 'MSFT' })).rejects.toBe(
+      persistenceError,
+    );
+    expect(tradeCache.getAll()).toEqual([existingTrade]);
+    expect(eventPublished).toBe(false);
+  });
+
   it('validates service input before accessing state or dependencies', async () => {
     const create = vi.fn<TradeRepositoryContract['create']>();
     const service = new TradeService(
       new TradeCache(),
-      { findAll: () => Promise.resolve([]), create },
+      {
+        findAll: () => Promise.resolve([]),
+        create,
+        amend: () => Promise.reject(new Error('Not used in validation test')),
+      },
       new TradeEventPublisher(),
     );
 
@@ -171,7 +260,11 @@ describe('TradeService', () => {
     const create = vi.fn<TradeRepositoryContract['create']>().mockResolvedValue(savedTrade);
     const service = new TradeService(
       cache,
-      { findAll: () => Promise.resolve([]), create },
+      {
+        findAll: () => Promise.resolve([]),
+        create,
+        amend: () => Promise.reject(new Error('Not used in create test')),
+      },
       new TradeEventPublisher(),
     );
 

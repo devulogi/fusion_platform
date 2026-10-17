@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
-import { validationErrorSchema } from '../../../../src/http/api-errors.ts';
+import {
+  tradeNotAmendableSchema,
+  tradeNotFoundSchema,
+  validationErrorSchema,
+} from '../../../../src/http/api-errors.ts';
 import { createApp } from '../../../../src/app.ts';
 import { ApiPath } from '../../../../src/http/constants.ts';
 import { HealthController } from '../../../../src/features/health/controllers/health-controller.ts';
@@ -15,6 +19,10 @@ import {
 import type { TradeRepositoryContract } from '../../../../src/features/trades/repositories/trade-repository.ts';
 import { TradeEventsController } from '../../../../src/features/trades/controllers/trade-events-controller.ts';
 import { TradeService } from '../../../../src/features/trades/services/trade-service.ts';
+import {
+  TradeNotAmendableError,
+  TradeNotFoundError,
+} from '../../../../src/features/trades/trade-errors.ts';
 
 class FailingTradeCache extends TradeCache {
   override getAll(): readonly never[] {
@@ -27,6 +35,7 @@ function createTestApp(
   tradeRepository: TradeRepositoryContract = {
     findAll: () => Promise.resolve([]),
     create: () => Promise.reject(new Error('Unexpected trade creation')),
+    amend: () => Promise.reject(new Error('Unexpected trade amendment')),
   },
   tradeEventPublisher = new TradeEventPublisher(),
 ) {
@@ -156,6 +165,7 @@ describe('GET /api/trades', () => {
     const tradeRepository: TradeRepositoryContract = {
       findAll: () => Promise.resolve([]),
       create: createTrade,
+      amend: () => Promise.reject(new Error('Not used in create test')),
     };
 
     const response = await request(createTestApp(tradeCache, tradeRepository, tradeEventPublisher))
@@ -206,6 +216,7 @@ describe('GET /api/trades', () => {
     const tradeRepository: TradeRepositoryContract = {
       findAll: () => Promise.resolve([]),
       create: createTrade,
+      amend: () => Promise.reject(new Error('Not used in validation test')),
     };
 
     const response = await request(createTestApp(tradeCache, tradeRepository, tradeEventPublisher))
@@ -222,5 +233,98 @@ describe('GET /api/trades', () => {
     expect(createTrade).not.toHaveBeenCalled();
     expect(tradeCache.getAll()).toEqual([]);
     expect(receivedEvents).toEqual([]);
+  });
+});
+
+describe('PATCH /api/v1/trades/:tradeId', () => {
+  const activeTrade: Trade = {
+    id: 'trade-1',
+    symbol: 'AAPL',
+    quantity: 100,
+    price: 185.25,
+    side: 'BUY',
+    trader: 'Alex Morgan',
+    tradeDate: '2026-10-14T12:00:00.000Z',
+    status: 'ACTIVE',
+  };
+
+  it('persists the amendment, updates cache, and publishes the saved trade', async () => {
+    const tradeCache = new TradeCache();
+    tradeCache.hydrate([activeTrade]);
+    const tradeEventPublisher = new TradeEventPublisher();
+    const receivedEvents: Array<{ type: string; trade: Trade }> = [];
+    tradeEventPublisher.subscribe((event) => receivedEvents.push(event));
+    const amendedTrade: Trade = { ...activeTrade, symbol: 'MSFT' };
+    const amendTrade = vi.fn<TradeRepositoryContract['amend']>().mockResolvedValue(amendedTrade);
+    const tradeRepository: TradeRepositoryContract = {
+      findAll: () => Promise.resolve([]),
+      create: () => Promise.reject(new Error('Not used in amend test')),
+      amend: amendTrade,
+    };
+
+    const response = await request(createTestApp(tradeCache, tradeRepository, tradeEventPublisher))
+      .patch(`${ApiPath.trades}/${activeTrade.id}`)
+      .send({ symbol: 'MSFT' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ ...amendedTrade, book: null, counterparty: null });
+    expect(amendTrade).toHaveBeenCalledWith(activeTrade.id, { symbol: 'MSFT' });
+    expect(tradeCache.getAll()).toEqual([amendedTrade]);
+    expect(receivedEvents).toEqual([{ type: 'trade.amended', trade: amendedTrade }]);
+  });
+
+  it('returns validation errors without persisting or publishing', async () => {
+    const tradeCache = new TradeCache();
+    tradeCache.hydrate([activeTrade]);
+    const tradeEventPublisher = new TradeEventPublisher();
+    const receivedEvents: Array<{ type: string; trade: Trade }> = [];
+    tradeEventPublisher.subscribe((event) => receivedEvents.push(event));
+    const amendTrade = vi.fn<TradeRepositoryContract['amend']>();
+    const tradeRepository: TradeRepositoryContract = {
+      findAll: () => Promise.resolve([]),
+      create: () => Promise.reject(new Error('Not used in amend test')),
+      amend: amendTrade,
+    };
+
+    const response = await request(createTestApp(tradeCache, tradeRepository, tradeEventPublisher))
+      .patch(`${ApiPath.trades}/${activeTrade.id}`)
+      .send({ status: 'CANCELLED' });
+
+    expect(response.status).toBe(400);
+    expect(validationErrorSchema.parse(response.body).error.code).toBe('VALIDATION_FAILED');
+    expect(amendTrade).not.toHaveBeenCalled();
+    expect(receivedEvents).toEqual([]);
+  });
+
+  it.each([
+    {
+      error: new TradeNotFoundError('missing-trade'),
+      status: 404,
+      code: 'TRADE_NOT_FOUND',
+    },
+    {
+      error: new TradeNotAmendableError('cancelled-trade'),
+      status: 409,
+      code: 'TRADE_NOT_AMENDABLE',
+    },
+  ])('maps $code repository failures to HTTP $status', async ({ error, status, code }) => {
+    const tradeCache = new TradeCache();
+    tradeCache.hydrate([activeTrade]);
+    const amendTrade = vi.fn<TradeRepositoryContract['amend']>().mockRejectedValue(error);
+    const tradeRepository: TradeRepositoryContract = {
+      findAll: () => Promise.resolve([]),
+      create: () => Promise.reject(new Error('Not used in amend test')),
+      amend: amendTrade,
+    };
+
+    const response = await request(createTestApp(tradeCache, tradeRepository))
+      .patch(`${ApiPath.trades}/${activeTrade.id}`)
+      .send({ symbol: 'MSFT' });
+
+    expect(response.status).toBe(status);
+    const responseSchema =
+      code === 'TRADE_NOT_FOUND' ? tradeNotFoundSchema : tradeNotAmendableSchema;
+    expect(responseSchema.parse(response.body).error.code).toBe(code);
+    expect(tradeCache.getAll()).toEqual([activeTrade]);
   });
 });

@@ -23,7 +23,7 @@ Compose loads backend connection settings from `backend/.env.dev` and frontend s
 
 ### Backend Decision Analysis and Resolution
 
-**Status:** Partially implemented. The PostgreSQL trade schema, setup-time seeding, collection read/create endpoints, in-memory cache, and basic `trade.created` SSE delivery are implemented. Amend/cancel workflows and robust SSE reconnect/snapshot recovery remain proposed.
+**Status:** Partially implemented. The PostgreSQL trade schema, setup-time seeding, collection read/create/amend endpoints, in-memory cache, and `trade.created`/`trade.amended` SSE delivery are implemented. Cancellation and robust SSE reconnect/snapshot recovery remain proposed.
 
 **Scope:** A single backend service for reading, creating, amending, and cancelling the assessment's approximately 100–1,000 trades. The API returns the complete collection; TanStack Table handles sorting and filtering in the browser. Pagination and multi-instance deployment are not assumed requirements.
 
@@ -37,13 +37,13 @@ Compose loads backend connection settings from `backend/.env.dev` and frontend s
 - Trade services own use-case coordination and business rules for creating, amending, and cancelling trades.
 - The repository owns PostgreSQL queries and transactions. PostgreSQL remains the system of record.
 - `TradeCache` owns an in-process `Map<TradeId, Trade>` used to serve the full collection after initial hydration.
-- A typed event publisher emits the implemented `trade.created` event after persistence and cache update. Amend/cancel event flows remain proposed; the SSE endpoint broadcasts created events to connected clients.
+- A typed event publisher emits `trade.created` and `trade.amended` after persistence and cache update. Cancellation remains proposed; the SSE endpoint broadcasts implemented events to connected clients.
 
 **Startup and read flow:** `setup.sh` applies SQL migrations and optionally seeds an empty database before starting the backend. The backend connects to PostgreSQL and loads persisted trades into the Map. `GET /api/v1/trades` returns `{ items }` for the complete collection, without redundant counts or pagination metadata; it does not perform a database load on each request. If startup hydration fails, the service must not report ready or serve an empty cache as complete. The client sorts and filters locally; the API does not page the collection server-side.
 
 **HTTP contracts and traceability:** JSON REST errors use `{ error: { code, reason, requestId } }`, with `details: [{ field, reason }]` for invalid fields. A server-generated `X-Request-Id` accompanies both successful and failed responses and correlates with structured request/error logs. Request logs record normalized routes rather than raw URLs or query values. API changes are reflected in the OpenAPI document served at `/api-docs/openapi.yaml` and Swagger UI at `/api-docs/`. The frontend is currently a starter screen and does not yet consume these contracts.
 
-**Exploring the API:** Open <http://localhost:4001/api-docs> on the configured backend port. Swagger UI uses that same origin for "Try it out"; no additional service or port is needed. The creation request and collection response include examples. The SSE operation documents the `trade.created` JSON payload, wire format, reconnect delay, and recovery limitations. Swagger UI is not a live event viewer: use `curl -N http://localhost:4001/api/v1/events` or a browser `EventSource`. Events have no IDs or durable replay; clients must reload the collection after reconnect and reconcile events received during a snapshot fetch. That client recovery flow remains unimplemented.
+**Exploring the API:** Open <http://localhost:4001/api-docs> on the configured backend port. Swagger UI uses that same origin for "Try it out"; no additional service or port is needed. The creation request and collection response include examples, and active trades can be amended with `PATCH /api/v1/trades/{tradeId}`. The SSE operation documents `trade.created` and `trade.amended`, their JSON payloads, wire format, reconnect delay, and recovery limitations. Swagger UI is not a live event viewer: use `curl -N http://localhost:4001/api/v1/events` or a browser `EventSource`. Events have no IDs or durable replay; clients must reload the collection after reconnect and reconcile events received during a snapshot fetch. That client recovery flow remains unimplemented.
 
 **Mutation flow:** The controller validates the request; the service applies domain rules; the repository commits to PostgreSQL and returns the saved trade; the service then updates the Map synchronously and publishes the corresponding event. A persistence failure must leave the cache unchanged and publish no event. SSE delivery failures must not turn an already-committed HTTP mutation into a failure.
 
@@ -51,7 +51,7 @@ Compose loads backend connection settings from `backend/.env.dev` and frontend s
 
 **Real-time transport:** Use Server-Sent Events because clients send commands through REST and only need server-to-client updates. SSE is receive-only by design; the assessment does not require client events over the real-time channel. WebSockets would be reconsidered if bidirectional streaming becomes a real requirement. The backend currently publishes `trade.created` to connected clients. Events are process-local and not durable; reconnect recovery and snapshot reconciliation remain future work.
 
-**Concurrency and alternatives:** Database transactions protect persistence. A `version` field with conditional updates can reject stale amendments with `409 Conflict`; include it if concurrent amendments are in scope and cover it with tests. Redis, distributed caching, and multiple services are deferred because the assessment specifies neither multi-instance scale nor a cache bottleneck. This is a single-process architecture with explicit limits, not a horizontally scaled design.
+**Concurrency and alternatives:** Amendments use an atomic active-status condition in PostgreSQL, but do not use version-based optimistic concurrency; concurrent amendments to an active trade may overwrite one another. Redis, distributed caching, and multiple services are deferred because the assessment specifies neither multi-instance scale nor a cache bottleneck. This is a single-process architecture with explicit limits, not a horizontally scaled design.
 
 The proposed backend workflows and acceptance criteria are documented in [backend/USER_STORIES.md](backend/USER_STORIES.md).
 

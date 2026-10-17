@@ -6,6 +6,10 @@ import {
   internalServerErrorSchema,
   tradeCollectionNotReadyMessage,
   tradeCollectionNotReadySchema,
+  tradeNotAmendableMessage,
+  tradeNotAmendableSchema,
+  tradeNotFoundMessage,
+  tradeNotFoundSchema,
   validationErrorSchema,
   validationFailedMessage,
   RouteNotFoundError,
@@ -13,6 +17,7 @@ import {
 } from './api-errors.ts';
 import { HttpStatus } from './constants.ts';
 import { defaultRequestLogger, getRequestId, type RequestLogger } from './request-context.ts';
+import { TradeNotAmendableError, TradeNotFoundError } from '../features/trades/trade-errors.ts';
 
 export const notFoundHandler: RequestHandler = (_request, _response, next) => {
   next(new RouteNotFoundError());
@@ -71,6 +76,26 @@ export function createErrorHandler(
           error: {
             code: 'ROUTE_NOT_FOUND',
             reason: 'Endpoint not found',
+            requestId,
+          },
+        }),
+      );
+    } else if (error instanceof TradeNotFoundError) {
+      response.status(HttpStatus.NOT_FOUND).json(
+        tradeNotFoundSchema.parse({
+          error: {
+            code: 'TRADE_NOT_FOUND',
+            reason: tradeNotFoundMessage,
+            requestId,
+          },
+        }),
+      );
+    } else if (error instanceof TradeNotAmendableError) {
+      response.status(HttpStatus.CONFLICT).json(
+        tradeNotAmendableSchema.parse({
+          error: {
+            code: 'TRADE_NOT_AMENDABLE',
+            reason: tradeNotAmendableMessage,
             requestId,
           },
         }),
