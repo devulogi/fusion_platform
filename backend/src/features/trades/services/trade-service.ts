@@ -2,7 +2,12 @@ import { TradeCache } from '../trade-cache.ts';
 import type { AmendTradeInput, CreateTradeInput, Trade } from '../models/trade.ts';
 import type { TradeRepositoryContract } from '../repositories/trade-repository.ts';
 import { TradeEventPublisher } from '../trade-event-publisher.ts';
-import { parseAmendTradeInput, parseCreateTradeInput, parseTradeId } from '../trade-input.ts';
+import {
+  parseAmendTradeInput,
+  parseCancelTradeInput,
+  parseCreateTradeInput,
+  parseTradeId,
+} from '../trade-input.ts';
 
 export class TradeService {
   constructor(
@@ -10,7 +15,7 @@ export class TradeService {
     private readonly tradeRepository: TradeRepositoryContract,
     private readonly tradeEventPublisher: Pick<
       TradeEventPublisher,
-      'publishTradeCreated' | 'publishTradeAmended'
+      'publishTradeCreated' | 'publishTradeAmended' | 'publishTradeCancelled'
     >,
   ) {}
 
@@ -35,5 +40,17 @@ export class TradeService {
     this.tradeCache.replace(savedTrade);
     this.tradeEventPublisher.publishTradeAmended(savedTrade);
     return savedTrade;
+  }
+
+  async cancelTrade(id: unknown, input: unknown): Promise<Trade> {
+    const validatedId = parseTradeId(id);
+    parseCancelTradeInput(input);
+    this.tradeCache.assertHydrated();
+    const result = await this.tradeRepository.cancel(validatedId);
+    this.tradeCache.replace(result.trade);
+    if (result.changed) {
+      this.tradeEventPublisher.publishTradeCancelled(result.trade);
+    }
+    return result.trade;
   }
 }

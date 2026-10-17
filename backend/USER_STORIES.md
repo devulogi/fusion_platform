@@ -1,6 +1,6 @@
 # Backend User Stories
 
-**Status:** Stories 1, 2, 4, 5, and 8 are implemented. Story 7 is partially implemented; Stories 3, 6, and 9 remain proposed.
+**Status:** Stories 1, 2, 4, 5, 6, and 8 are implemented. Story 7 is partially implemented; Stories 3 and 9 remain proposed.
 
 These stories translate the take-home requirements into backend behavior. Implemented stories describe current behavior; paths and business rules in proposed stories are not claims about available API behavior.
 
@@ -10,7 +10,8 @@ These stories translate the take-home requirements into backend behavior. Implem
 - PostgreSQL is the system of record. A process-local `Map<TradeId, Trade>` is a disposable read cache and is hydrated from the database.
 - Clients send create, amend, and cancel commands through REST. Server-to-client changes are delivered over SSE.
 - The persisted trade contract uses the assessment's required fields: ID, symbol, side, quantity, price, trader, trade date, and status. Book and counterparty are optional sample-data fields.
-- Confirmed for Story 5: cancelled trades cannot be amended. Amendments do not use version-based optimistic concurrency. Repeated cancellation remains undecided.
+- Confirmed for Story 5: cancelled trades cannot be amended. Amendments do not use version-based optimistic concurrency.
+- Confirmed for Story 6: repeated cancellation is idempotent, returns HTTP `200`, and does not publish a duplicate event.
 
 ## Stories
 
@@ -91,15 +92,20 @@ As a trader, I want to amend an existing trade so corrections are reflected in t
 
 ### 6. Cancel a trade
 
+**Status:** Implemented
+
 As a trader, I want to cancel an active trade without deleting its record, so the blotter retains the trade and its status.
 
 **Acceptance criteria**
 
-- Cancellation changes status to `CANCELLED` and preserves the trade record.
+- `PATCH /api/v1/trades/:tradeId` accepts the cancellation command `{ "status": "CANCELLED" }`, distinct from the amendment request body.
+- Cancellation changes an active trade's status to `CANCELLED` and preserves the trade record.
 - The change is committed to PostgreSQL before the cache is updated and `trade.cancelled` is emitted.
-- A successful cancellation returns the updated trade.
-- Repeating cancellation follows the agreed idempotency rule and does not publish duplicate state-change events.
+- A successful cancellation returns the updated trade with HTTP `200`.
+- Repeating cancellation returns the canonical cancelled trade with HTTP `200` and does not publish a duplicate event.
 - Unknown trades return HTTP `404`; persistence failures do not alter cache state or publish an event.
+
+**Implementation:** The PATCH controller recognizes the strict cancellation command separately from amendment fields. The repository conditionally updates only an `ACTIVE` row; on a conditional-write miss it distinguishes a missing ID from an already-cancelled trade. The service replaces the cache from the canonical persisted record and publishes `trade.cancelled` only when the status actually changed. Repeated cancellation is an idempotent success with no duplicate event.
 
 ### 7. Receive live trade updates
 
@@ -110,14 +116,14 @@ As a connected blotter user, I want other users' committed trade changes pushed 
 **Acceptance criteria**
 
 - `GET /api/v1/events` opens an SSE stream with the correct `text/event-stream` content type.
-- The server sends named `trade.created` and `trade.amended` events containing the canonical saved trade. Cancellation is not implemented.
+- The server sends named `trade.created`, `trade.amended`, and `trade.cancelled` events containing the canonical saved trade.
 - The event publisher runs only after a successful database mutation and cache update.
 - A disconnected client is removed from active subscribers and can reconnect.
 - Events are process-local and not durable. After reconnect, the client reloads `GET /api/v1/trades` to reconcile missed events.
 - The client opens the event stream before fetching its initial snapshot and reconciles events received during that fetch, avoiding a snapshot/subscribe gap.
 - SSE delivery errors do not roll back committed data or change the successful REST response.
 
-**Implementation to date:** `GET /api/v1/events` streams `trade.created` and `trade.amended`. Cancellation events, reconnect recovery, and snapshot reconciliation remain proposed.
+**Implementation to date:** `GET /api/v1/events` streams `trade.created`, `trade.amended`, and `trade.cancelled`. Reconnect recovery and snapshot reconciliation remain proposed.
 
 ### 8. Explore the API contract
 
@@ -132,7 +138,7 @@ As an interviewer or frontend developer, I want a browsable API contract so I ca
 - The specification is updated alongside API changes and does not present planned endpoints as implemented.
 - The SSE endpoint documents its `text/event-stream` response, event names, payload shape, and reconnect expectations. Any SSE details not represented clearly by the chosen OpenAPI tooling are documented alongside the specification.
 
-**Implementation:** Swagger UI is served at `/api-docs` (redirecting to `/api-docs/`) on the backend's existing port, with the generated specification at `/api-docs/openapi.yaml`. The specification describes implemented liveness, collection, creation, amendment, and SSE routes, request/response schemas, error statuses, and request-ID headers. Examples support trying creation and inspecting collection responses. The SSE operation documents the `trade.created` and `trade.amended` payloads and wire examples, retry interval, lack of durable replay, and client recovery expectations. It distinguishes the proposed cancellation event and unimplemented client reconciliation; Swagger UI is not an SSE event viewer.
+**Implementation:** Swagger UI is served at `/api-docs` (redirecting to `/api-docs/`) on the backend's existing port, with the generated specification at `/api-docs/openapi.yaml`. The specification describes implemented liveness, collection, creation, amendment/cancellation, and SSE behavior, request/response schemas, error statuses, and request-ID headers. The PATCH request documents both amendment fields and the strict cancellation command. The SSE operation documents the `trade.created`, `trade.amended`, and `trade.cancelled` payloads and wire examples, retry interval, lack of durable replay, and client recovery expectations. Client reconciliation remains unimplemented; Swagger UI is not an SSE event viewer.
 
 ### 9. Review the backend architecture
 

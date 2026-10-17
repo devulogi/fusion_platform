@@ -73,6 +73,7 @@ describe('API documentation', () => {
       .parse(document.getIn(['paths', ApiPath.tradeEvents, 'get', 'description']));
     expect(description).toContain('trade.created');
     expect(description).toContain('trade.amended');
+    expect(description).toContain('trade.cancelled');
     expect(description).toContain('Last-Event-ID');
     expect(description).toContain('not implemented');
     expect(description).toContain('3000');
@@ -98,6 +99,34 @@ describe('API documentation', () => {
     if (data === undefined) throw new Error('Missing event data example');
     const payload: unknown = JSON.parse(data.slice('data: '.length));
     expect(tradeResponseSchema.parse(payload)).toMatchObject({ book: null, counterparty: null });
+    const cancelledExample = z
+      .string()
+      .parse(
+        document.getIn([
+          'paths',
+          ApiPath.tradeEvents,
+          'get',
+          'responses',
+          '200',
+          'content',
+          'text/event-stream',
+          'examples',
+          'cancelled',
+          'value',
+        ]),
+      );
+    expect(cancelledExample).toMatch(/^retry: 3000\n\nevent: trade.cancelled\ndata: /);
+    const openApiDocument = z
+      .object({ components: z.object({ schemas: z.record(z.unknown()) }) })
+      .parse(document.toJS());
+    const cancelRequestSchema = z
+      .object({
+        properties: z.object({
+          status: z.object({ enum: z.array(z.string()) }),
+        }),
+      })
+      .parse(openApiDocument.components.schemas.CancelTradeRequest);
+    expect(cancelRequestSchema.properties.status.enum).toContain('CANCELLED');
   });
 
   it('serves Swagger UI from the backend', async () => {

@@ -22,8 +22,14 @@ export const amendTradeInputSchema = createTradeInputSchema
   .strict()
   .openapi('AmendTradeRequest');
 
+export const cancelTradeInputSchema = z
+  .object({ status: z.literal('CANCELLED') })
+  .strict()
+  .openapi('CancelTradeRequest');
+
 export type CreateTradeInput = z.infer<typeof createTradeInputSchema>;
 export type AmendTradeInput = z.infer<typeof amendTradeInputSchema>;
+export type CancelTradeInput = z.infer<typeof cancelTradeInputSchema>;
 
 export class TradeInputValidationError extends Error {
   constructor(readonly cause: ZodError) {
@@ -42,6 +48,14 @@ export function parseCreateTradeInput(input: unknown): CreateTradeInput {
 
 export function parseAmendTradeInput(input: unknown): AmendTradeInput {
   const result = amendTradeInputSchema.safeParse(input);
+  if (!result.success) {
+    throw new TradeInputValidationError(result.error);
+  }
+  return result.data;
+}
+
+export function parseCancelTradeInput(input: unknown): CancelTradeInput {
+  const result = cancelTradeInputSchema.safeParse(input);
   if (!result.success) {
     throw new TradeInputValidationError(result.error);
   }
