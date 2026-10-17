@@ -12,7 +12,7 @@ import { TradeService } from '../../../../src/features/trades/services/trade-ser
 import { serializeTrade } from '../../../../src/features/trades/serializers/trade-serializer.ts';
 
 describe('GET /api/v1/events', () => {
-  it('streams canonical created and amended trade events', async () => {
+  it('streams canonical created, amended, and cancelled trade events', async () => {
     const tradeCache = new TradeCache();
     tradeCache.hydrate([]);
     const tradeEventPublisher = new TradeEventPublisher();
@@ -59,7 +59,7 @@ describe('GET /api/v1/events', () => {
         let eventText = '';
         streamResponse?.on('data', (chunk: Buffer | string) => {
           eventText += chunk.toString();
-          if (eventText.includes('event: trade.amended')) {
+          if (eventText.includes('event: trade.cancelled')) {
             resolve(eventText);
           }
         });
@@ -77,6 +77,7 @@ describe('GET /api/v1/events', () => {
 
       tradeEventPublisher.publishTradeCreated(trade);
       tradeEventPublisher.publishTradeAmended({ ...trade, symbol: 'MSFT' });
+      tradeEventPublisher.publishTradeCancelled({ ...trade, status: 'CANCELLED' });
 
       const eventText = await eventTextPromise;
       expect(eventText).toContain('event: trade.created\n');
@@ -84,6 +85,10 @@ describe('GET /api/v1/events', () => {
       expect(eventText).toContain('event: trade.amended\n');
       expect(eventText).toContain(
         `data: ${JSON.stringify(serializeTrade({ ...trade, symbol: 'MSFT' }))}`,
+      );
+      expect(eventText).toContain('event: trade.cancelled\n');
+      expect(eventText).toContain(
+        `data: ${JSON.stringify(serializeTrade({ ...trade, status: 'CANCELLED' }))}`,
       );
     } finally {
       streamResponse?.destroy();
