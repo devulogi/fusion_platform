@@ -12,7 +12,7 @@ import { TradeService } from '../../../../src/features/trades/services/trade-ser
 import { serializeTrade } from '../../../../src/features/trades/serializers/trade-serializer.ts';
 
 describe('GET /api/v1/events', () => {
-  it('streams the canonical trade.created event', async () => {
+  it('streams canonical created and amended trade events', async () => {
     const tradeCache = new TradeCache();
     tradeCache.hydrate([]);
     const tradeEventPublisher = new TradeEventPublisher();
@@ -25,6 +25,8 @@ describe('GET /api/v1/events', () => {
             trade: {
               findMany: () => Promise.resolve([]),
               create: () => Promise.reject(new Error('Not used in SSE test')),
+              findUnique: () => Promise.resolve(null),
+              update: () => Promise.reject(new Error('Not used in SSE test')),
             },
           }),
           tradeEventPublisher,
@@ -57,7 +59,7 @@ describe('GET /api/v1/events', () => {
         let eventText = '';
         streamResponse?.on('data', (chunk: Buffer | string) => {
           eventText += chunk.toString();
-          if (eventText.includes('event: trade.created')) {
+          if (eventText.includes('event: trade.amended')) {
             resolve(eventText);
           }
         });
@@ -74,10 +76,15 @@ describe('GET /api/v1/events', () => {
       };
 
       tradeEventPublisher.publishTradeCreated(trade);
+      tradeEventPublisher.publishTradeAmended({ ...trade, symbol: 'MSFT' });
 
       const eventText = await eventTextPromise;
       expect(eventText).toContain('event: trade.created\n');
       expect(eventText).toContain(`data: ${JSON.stringify(serializeTrade(trade))}`);
+      expect(eventText).toContain('event: trade.amended\n');
+      expect(eventText).toContain(
+        `data: ${JSON.stringify(serializeTrade({ ...trade, symbol: 'MSFT' }))}`,
+      );
     } finally {
       streamResponse?.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));

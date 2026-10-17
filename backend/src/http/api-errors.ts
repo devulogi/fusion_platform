@@ -1,6 +1,8 @@
 import { z } from './openapi/zod.ts';
 
 export const tradeCollectionNotReadyMessage = 'Trade collection is not ready';
+export const tradeNotFoundMessage = 'Trade not found';
+export const tradeNotAmendableMessage = 'Only active trades can be amended';
 export const validationFailedMessage = 'The provided payload failed data validation rules.';
 export const internalServerErrorMessage = 'Internal server error';
 
@@ -27,6 +29,26 @@ export const tradeCollectionNotReadySchema = z
     }),
   })
   .openapi('TradeCollectionNotReadyError');
+
+export const tradeNotFoundSchema = z
+  .object({
+    error: z.object({
+      code: z.literal('TRADE_NOT_FOUND'),
+      reason: z.literal(tradeNotFoundMessage),
+      requestId: z.string().uuid(),
+    }),
+  })
+  .openapi('TradeNotFoundError');
+
+export const tradeNotAmendableSchema = z
+  .object({
+    error: z.object({
+      code: z.literal('TRADE_NOT_AMENDABLE'),
+      reason: z.literal(tradeNotAmendableMessage),
+      requestId: z.string().uuid(),
+    }),
+  })
+  .openapi('TradeNotAmendableError');
 
 export const validationErrorSchema = z
   .object({

@@ -27,6 +27,11 @@ export class TradeCache {
     this.tradesById.set(trade.id, { ...trade });
   }
 
+  replace(trade: Trade): void {
+    this.assertHydrated();
+    this.tradesById.set(trade.id, { ...trade });
+  }
+
   getAll(): readonly Trade[] {
     this.assertHydrated();
     return Array.from(this.tradesById.values(), (trade) => ({ ...trade }));

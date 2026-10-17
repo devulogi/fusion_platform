@@ -1,6 +1,6 @@
 # Backend User Stories
 
-**Status:** Stories 1, 2, 4, and 8 are implemented. Story 7 is partially implemented; Stories 3, 5, 6, and 9 remain proposed.
+**Status:** Stories 1, 2, 4, 5, and 8 are implemented. Story 7 is partially implemented; Stories 3, 6, and 9 remain proposed.
 
 These stories translate the take-home requirements into backend behavior. Implemented stories describe current behavior; paths and business rules in proposed stories are not claims about available API behavior.
 
@@ -10,7 +10,7 @@ These stories translate the take-home requirements into backend behavior. Implem
 - PostgreSQL is the system of record. A process-local `Map<TradeId, Trade>` is a disposable read cache and is hydrated from the database.
 - Clients send create, amend, and cancel commands through REST. Server-to-client changes are delivered over SSE.
 - The persisted trade contract uses the assessment's required fields: ID, symbol, side, quantity, price, trader, trade date, and status. Book and counterparty are optional sample-data fields.
-- Proposed domain assumptions: cancelled trades cannot be amended, and repeated cancellation is idempotent. Confirm these rules before implementation.
+- Confirmed for Story 5: cancelled trades cannot be amended. Amendments do not use version-based optimistic concurrency. Repeated cancellation remains undecided.
 
 ## Stories
 
@@ -74,6 +74,8 @@ As a trader, I want to create a trade so it is persisted and visible to all conn
 
 ### 5. Amend a trade
 
+**Status:** Implemented
+
 As a trader, I want to amend an existing trade so corrections are reflected in the blotter and visible to other users.
 
 **Acceptance criteria**
@@ -82,8 +84,10 @@ As a trader, I want to amend an existing trade so corrections are reflected in t
 - A valid amendment is persisted first, then the saved trade replaces the cached entry, then `trade.amended` is emitted.
 - The response contains the persisted trade.
 - An unknown trade returns HTTP `404`; invalid fields return HTTP `400`.
-- Under the proposed domain rule, a cancelled trade cannot be amended.
-- If version-based optimistic concurrency is selected, a stale amendment returns HTTP `409` and leaves the cache and event stream unchanged.
+- A cancelled trade cannot be amended and returns HTTP `409 Conflict`.
+- Amendment accepts all editable trade fields except `id` and `status`; no version field or optimistic concurrency check is used.
+
+**Implementation:** `PATCH /api/v1/trades/:tradeId` validates the path ID and strict partial request body, then conditionally updates only an active trade in PostgreSQL. The service replaces the cache entry with the canonical saved trade before publishing `trade.amended`. Success returns the saved trade with HTTP `200`; unknown IDs return `404`, invalid requests return `400`, and cancelled trades return `409`. A persistence failure leaves cache and events unchanged.
 
 ### 6. Cancel a trade
 
@@ -106,14 +110,14 @@ As a connected blotter user, I want other users' committed trade changes pushed 
 **Acceptance criteria**
 
 - `GET /api/v1/events` opens an SSE stream with the correct `text/event-stream` content type.
-- The server sends named `trade.created`, `trade.amended`, and `trade.cancelled` events containing the canonical saved trade.
+- The server sends named `trade.created` and `trade.amended` events containing the canonical saved trade. Cancellation is not implemented.
 - The event publisher runs only after a successful database mutation and cache update.
 - A disconnected client is removed from active subscribers and can reconnect.
 - Events are process-local and not durable. After reconnect, the client reloads `GET /api/v1/trades` to reconcile missed events.
 - The client opens the event stream before fetching its initial snapshot and reconciles events received during that fetch, avoiding a snapshot/subscribe gap.
 - SSE delivery errors do not roll back committed data or change the successful REST response.
 
-**Implementation to date:** `GET /api/v1/events` streams `trade.created`. Amend/cancel event types, reconnect recovery, and snapshot reconciliation remain proposed.
+**Implementation to date:** `GET /api/v1/events` streams `trade.created` and `trade.amended`. Cancellation events, reconnect recovery, and snapshot reconciliation remain proposed.
 
 ### 8. Explore the API contract
 
@@ -128,7 +132,7 @@ As an interviewer or frontend developer, I want a browsable API contract so I ca
 - The specification is updated alongside API changes and does not present planned endpoints as implemented.
 - The SSE endpoint documents its `text/event-stream` response, event names, payload shape, and reconnect expectations. Any SSE details not represented clearly by the chosen OpenAPI tooling are documented alongside the specification.
 
-**Implementation:** Swagger UI is served at `/api-docs` (redirecting to `/api-docs/`) on the backend's existing port, with the generated specification at `/api-docs/openapi.yaml`. The specification describes the implemented liveness, collection, creation, and SSE routes, request/response schemas, error statuses, and request-ID headers. Examples support trying creation and inspecting collection responses. The SSE operation description includes the `trade.created` payload schema and wire example, retry interval, lack of durable replay, and client recovery expectations. It explicitly distinguishes proposed amend/cancel events and unimplemented client reconciliation from current behavior; Swagger UI is not an SSE event viewer.
+**Implementation:** Swagger UI is served at `/api-docs` (redirecting to `/api-docs/`) on the backend's existing port, with the generated specification at `/api-docs/openapi.yaml`. The specification describes implemented liveness, collection, creation, amendment, and SSE routes, request/response schemas, error statuses, and request-ID headers. Examples support trying creation and inspecting collection responses. The SSE operation documents the `trade.created` and `trade.amended` payloads and wire examples, retry interval, lack of durable replay, and client recovery expectations. It distinguishes the proposed cancellation event and unimplemented client reconciliation; Swagger UI is not an SSE event viewer.
 
 ### 9. Review the backend architecture
 

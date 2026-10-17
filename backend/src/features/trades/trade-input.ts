@@ -16,7 +16,14 @@ export const createTradeInputSchema = z
   .strict()
   .openapi('CreateTradeRequest');
 
+export const amendTradeInputSchema = createTradeInputSchema
+  .omit({ status: true })
+  .partial()
+  .strict()
+  .openapi('AmendTradeRequest');
+
 export type CreateTradeInput = z.infer<typeof createTradeInputSchema>;
+export type AmendTradeInput = z.infer<typeof amendTradeInputSchema>;
 
 export class TradeInputValidationError extends Error {
   constructor(readonly cause: ZodError) {
@@ -27,6 +34,22 @@ export class TradeInputValidationError extends Error {
 
 export function parseCreateTradeInput(input: unknown): CreateTradeInput {
   const result = createTradeInputSchema.safeParse(input);
+  if (!result.success) {
+    throw new TradeInputValidationError(result.error);
+  }
+  return result.data;
+}
+
+export function parseAmendTradeInput(input: unknown): AmendTradeInput {
+  const result = amendTradeInputSchema.safeParse(input);
+  if (!result.success) {
+    throw new TradeInputValidationError(result.error);
+  }
+  return result.data;
+}
+
+export function parseTradeId(input: unknown): string {
+  const result = z.string().min(1).max(32).safeParse(input);
   if (!result.success) {
     throw new TradeInputValidationError(result.error);
   }

@@ -2,14 +2,15 @@ import type { Trade } from './models/trade.ts';
 
 export const TradeEventType = {
   CREATED: 'trade.created',
+  AMENDED: 'trade.amended',
 } as const;
 
-export interface TradeCreatedEvent {
-  readonly type: typeof TradeEventType.CREATED;
+export interface TradeChangedEvent {
+  readonly type: (typeof TradeEventType)[keyof typeof TradeEventType];
   readonly trade: Trade;
 }
 
-export type TradeEventListener = (event: TradeCreatedEvent) => void;
+export type TradeEventListener = (event: TradeChangedEvent) => void;
 
 export class TradeEventPublisher {
   private readonly listeners = new Set<TradeEventListener>();
@@ -20,11 +21,15 @@ export class TradeEventPublisher {
   }
 
   publishTradeCreated(trade: Trade): void {
-    const event: TradeCreatedEvent = {
-      type: TradeEventType.CREATED,
-      trade: { ...trade },
-    };
+    this.publish(TradeEventType.CREATED, trade);
+  }
 
+  publishTradeAmended(trade: Trade): void {
+    this.publish(TradeEventType.AMENDED, trade);
+  }
+
+  private publish(type: TradeChangedEvent['type'], trade: Trade): void {
+    const event: TradeChangedEvent = { type, trade: { ...trade } };
     for (const listener of this.listeners) {
       try {
         listener(event);

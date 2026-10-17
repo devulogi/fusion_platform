@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Prisma } from '@prisma/client';
 import { TradeRepository } from '../../../../src/features/trades/repositories/trade-repository.ts';
+import {
+  TradeNotAmendableError,
+  TradeNotFoundError,
+} from '../../../../src/features/trades/trade-errors.ts';
 import type {
   PersistedTrade,
   TradeWriteDatabase,
@@ -24,7 +29,14 @@ describe('TradeRepository', () => {
       .fn<TradeWriteDatabase['trade']['findMany']>()
       .mockResolvedValue([persistedTrade]);
     const create = vi.fn<TradeWriteDatabase['trade']['create']>();
-    const repository = new TradeRepository({ trade: { findMany, create } });
+    const repository = new TradeRepository({
+      trade: {
+        findMany,
+        create,
+        findUnique: () => Promise.resolve(null),
+        update: () => Promise.reject(new Error('Not used in read test')),
+      },
+    });
 
     await expect(repository.findAll()).resolves.toEqual([
       {
@@ -46,7 +58,14 @@ describe('TradeRepository', () => {
       .fn<TradeWriteDatabase['trade']['findMany']>()
       .mockRejectedValue(databaseError);
     const create = vi.fn<TradeWriteDatabase['trade']['create']>();
-    const repository = new TradeRepository({ trade: { findMany, create } });
+    const repository = new TradeRepository({
+      trade: {
+        findMany,
+        create,
+        findUnique: () => Promise.resolve(null),
+        update: () => Promise.reject(new Error('Not used in read test')),
+      },
+    });
 
     await expect(repository.findAll()).rejects.toBe(databaseError);
   });
@@ -56,7 +75,14 @@ describe('TradeRepository', () => {
       .fn<TradeWriteDatabase['trade']['create']>()
       .mockResolvedValue({ ...persistedTrade, id: 'generated-id' });
     const findMany = vi.fn<TradeWriteDatabase['trade']['findMany']>().mockResolvedValue([]);
-    const repository = new TradeRepository({ trade: { findMany, create } });
+    const repository = new TradeRepository({
+      trade: {
+        findMany,
+        create,
+        findUnique: () => Promise.resolve(null),
+        update: () => Promise.reject(new Error('Not used in create test')),
+      },
+    });
     const input = {
       symbol: 'AAPL',
       quantity: 100,
@@ -87,7 +113,14 @@ describe('TradeRepository', () => {
     const failure = new Error('Database unavailable');
     const create = vi.fn<TradeWriteDatabase['trade']['create']>().mockRejectedValue(failure);
     const findMany = vi.fn<TradeWriteDatabase['trade']['findMany']>();
-    const repository = new TradeRepository({ trade: { findMany, create } });
+    const repository = new TradeRepository({
+      trade: {
+        findMany,
+        create,
+        findUnique: () => Promise.resolve(null),
+        update: () => Promise.reject(new Error('Not used in create test')),
+      },
+    });
 
     await expect(
       repository.create({
@@ -101,5 +134,94 @@ describe('TradeRepository', () => {
       }),
     ).rejects.toBe(failure);
     expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it('conditionally updates an active trade and returns the canonical row', async () => {
+    const updatedTrade: PersistedTrade = {
+      ...persistedTrade,
+      symbol: 'MSFT',
+      price: { toNumber: () => 420.5 },
+      book: 'EQUITIES_US',
+    };
+    const update = vi.fn().mockResolvedValue(updatedTrade);
+    const repository = new TradeRepository({
+      trade: {
+        findMany: vi.fn().mockResolvedValue([]),
+        findUnique: vi.fn().mockResolvedValue(persistedTrade),
+        create: vi.fn(),
+        update,
+      },
+    });
+    const input = {
+      symbol: 'MSFT',
+      price: 420.5,
+      tradeDate: '2026-10-15T10:30:00.000Z',
+      book: 'EQUITIES_US',
+    };
+
+    await expect(repository.amend('trade-1', input)).resolves.toEqual({
+      id: 'trade-1',
+      symbol: 'MSFT',
+      quantity: 100,
+      price: 420.5,
+      side: 'BUY',
+      trader: 'Alex Morgan',
+      tradeDate: '2026-10-14T12:00:00.000Z',
+      status: 'ACTIVE',
+      book: 'EQUITIES_US',
+    });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'trade-1', status: 'ACTIVE' },
+      data: {
+        symbol: 'MSFT',
+        price: 420.5,
+        tradeDate: new Date(input.tradeDate),
+        book: 'EQUITIES_US',
+      },
+    });
+  });
+
+  it('maps an absent row after a conditional update failure to not found', async () => {
+    const updateError = new Prisma.PrismaClientKnownRequestError('Record not found', {
+      code: 'P2025',
+      clientVersion: 'test',
+    });
+    const findUnique = vi.fn<TradeWriteDatabase['trade']['findUnique']>().mockResolvedValue(null);
+    const repository = new TradeRepository({
+      trade: {
+        findMany: vi.fn<TradeWriteDatabase['trade']['findMany']>().mockResolvedValue([]),
+        findUnique,
+        create: vi.fn<TradeWriteDatabase['trade']['create']>(),
+        update: vi.fn<TradeWriteDatabase['trade']['update']>().mockRejectedValue(updateError),
+      },
+    });
+
+    await expect(repository.amend('missing-trade', { symbol: 'MSFT' })).rejects.toBeInstanceOf(
+      TradeNotFoundError,
+    );
+    expect(findUnique).toHaveBeenCalledWith({ where: { id: 'missing-trade' } });
+  });
+
+  it('maps an existing cancelled row after a conditional update failure to not amendable', async () => {
+    const updateError = new Prisma.PrismaClientKnownRequestError('Record not found', {
+      code: 'P2025',
+      clientVersion: 'test',
+    });
+    const findUnique = vi
+      .fn<TradeWriteDatabase['trade']['findUnique']>()
+      .mockResolvedValue({ ...persistedTrade, status: 'CANCELLED' });
+    const repository = new TradeRepository({
+      trade: {
+        findMany: vi.fn<TradeWriteDatabase['trade']['findMany']>().mockResolvedValue([]),
+        findUnique,
+        create: vi.fn<TradeWriteDatabase['trade']['create']>(),
+        update: vi.fn<TradeWriteDatabase['trade']['update']>().mockRejectedValue(updateError),
+      },
+    });
+
+    await expect(repository.amend('trade-1', { symbol: 'MSFT' })).rejects.toBeInstanceOf(
+      TradeNotAmendableError,
+    );
+    expect(findUnique).toHaveBeenCalledWith({ where: { id: 'trade-1' } });
   });
 });
