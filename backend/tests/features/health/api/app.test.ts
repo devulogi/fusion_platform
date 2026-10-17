@@ -20,6 +20,8 @@ const app = createApp({
         trade: {
           findMany: () => Promise.resolve([]),
           create: () => Promise.reject(new Error('Not used in health tests')),
+          findUnique: () => Promise.resolve(null),
+          update: () => Promise.reject(new Error('Not used in health tests')),
         },
       }),
       tradeEventPublisher,

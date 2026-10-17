@@ -2,6 +2,8 @@ import { OpenAPIRegistry, OpenApiGeneratorV31 } from '@asteasolutions/zod-to-ope
 import {
   internalServerErrorSchema,
   tradeCollectionNotReadySchema,
+  tradeNotAmendableSchema,
+  tradeNotFoundSchema,
   validationErrorSchema,
 } from '../api-errors.ts';
 import { healthResponseSchema } from '../../features/health/controllers/health-controller.ts';
@@ -9,7 +11,10 @@ import {
   tradeCollectionResponseSchema,
   tradeResponseSchema,
 } from '../../features/trades/serializers/trade-serializer.ts';
-import { createTradeInputSchema } from '../../features/trades/trade-input.ts';
+import {
+  amendTradeInputSchema,
+  createTradeInputSchema,
+} from '../../features/trades/trade-input.ts';
 import { requestIdHeader, requestIdResponseHeader } from '../request-context.ts';
 import { z } from './zod.ts';
 import { ApiPath, HttpStatus } from '../constants.ts';
@@ -30,7 +35,9 @@ const tradeExample = tradeResponseSchema.parse({
   counterparty: null,
 });
 const createdEventExample = `retry: 3000\n\nevent: ${TradeEventType.CREATED}\ndata: ${JSON.stringify(tradeExample)}\n\n`;
+const amendedEventExample = `retry: 3000\n\nevent: ${TradeEventType.AMENDED}\ndata: ${JSON.stringify(tradeExample)}\n\n`;
 registry.register('TradeCreatedEventData', tradeResponseSchema);
+registry.register('TradeAmendedEventData', tradeResponseSchema);
 
 registry.registerPath({
   method: 'post',
@@ -100,20 +107,77 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: 'patch',
+  path: `${ApiPath.trades}/{tradeId}`,
+  operationId: 'amendTrade',
+  summary: 'Amend an active trade',
+  description:
+    'Validates editable trade fields (excluding id and status), persists the amendment, replaces the cached trade with the canonical saved trade, then publishes trade.amended. Cancelled trades cannot be amended.',
+  request: {
+    params: z.object({ tradeId: z.string().min(1).max(32) }),
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: amendTradeInputSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    [HttpStatus.OK]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Canonical amended trade',
+      content: {
+        'application/json': {
+          schema: tradeResponseSchema,
+          example: tradeExample,
+        },
+      },
+    },
+    [HttpStatus.BAD_REQUEST]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Request validation failed',
+      content: { 'application/json': { schema: validationErrorSchema } },
+    },
+    [HttpStatus.NOT_FOUND]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Trade not found',
+      content: { 'application/json': { schema: tradeNotFoundSchema } },
+    },
+    [HttpStatus.CONFLICT]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Trade cannot be amended',
+      content: { 'application/json': { schema: tradeNotAmendableSchema } },
+    },
+    [HttpStatus.SERVICE_UNAVAILABLE]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Trade collection is not ready',
+      content: { 'application/json': { schema: tradeCollectionNotReadySchema } },
+    },
+    [HttpStatus.INTERNAL_SERVER_ERROR]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Unexpected server error',
+      content: { 'application/json': { schema: internalServerErrorSchema } },
+    },
+  },
+});
+
+registry.registerPath({
   method: 'get',
   path: ApiPath.tradeEvents,
   operationId: 'subscribeTradeEvents',
   summary: 'Subscribe to trade events',
   description: [
-    'Long-lived text/event-stream connection. The only implemented named event is trade.created.',
-    'Each data field contains one JSON Trade object (the TradeCreatedEventData schema), not an event envelope or collection.',
+    'Long-lived text/event-stream connection. The implemented named events are trade.created and trade.amended.',
+    'Each data field contains one JSON Trade object (the TradeCreatedEventData or TradeAmendedEventData schema), not an event envelope or collection.',
     'The payload is the canonical saved trade after database persistence and cache update; nullable book and counterparty fields remain present.',
     'The server sends retry: 3000 on connection to suggest a 3000 millisecond EventSource reconnect delay.',
     'Events are process-local and not durable. No event IDs are sent; Last-Event-ID replay is not supported.',
     'After reconnect, clients must reload GET /api/v1/trades to recover missed changes.',
     'For a gap-free snapshot, clients should establish the stream first and reconcile events buffered during the collection fetch.',
     'Automatic client recovery and snapshot reconciliation are not implemented in the current frontend.',
-    'trade.amended and trade.cancelled are not implemented and are not currently emitted.',
+    'trade.cancelled is not implemented and is not currently emitted.',
     'Disconnecting removes the subscriber. Once streaming starts, failures cannot be returned as JSON error bodies.',
     'Swagger UI documents the stream but is not a live SSE event viewer; use EventSource or curl -N /api/v1/events on the backend origin.',
   ].join('\n\n'),
@@ -124,7 +188,10 @@ registry.registerPath({
       content: {
         'text/event-stream': {
           schema: z.string().openapi('TradeEventStream'),
-          example: createdEventExample,
+          examples: {
+            created: { value: createdEventExample },
+            amended: { value: amendedEventExample },
+          },
         },
       },
     },
@@ -205,7 +272,7 @@ export const openApiDocument = new OpenApiGeneratorV31(registry.definitions).gen
     title: 'Fusion Platform Backend API',
     version: '1.0.0',
     description:
-      'Implemented backend routes only. Create trades with POST /api/v1/trades, retrieve the full snapshot with GET /api/v1/trades, and subscribe to trade.created through GET /api/v1/events. Amend, cancel, and readiness routes remain proposed. X-Request-Id correlates each response with server logs.',
+      'Implemented backend routes only. Create trades with POST /api/v1/trades, amend active trades with PATCH /api/v1/trades/{tradeId}, retrieve the full snapshot with GET /api/v1/trades, and subscribe to trade.created and trade.amended through GET /api/v1/events. Cancel and readiness routes remain proposed. X-Request-Id correlates each response with server logs.',
   },
   servers: [{ url: '/', description: 'The backend origin serving this document and Swagger UI' }],
 });

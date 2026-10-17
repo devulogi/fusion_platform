@@ -4,8 +4,17 @@ import { recordRequestRoute } from '../../http/request-context.ts';
 import type { TradeController } from './controllers/trade-controller.ts';
 
 export function tradeRouter(controller: TradeController): Router {
+  const tradeMiddlewarePipeline = (path: string) => {
+    return [recordRequestRoute(path), json()];
+  };
+
   const router = Router();
   router.get('/', recordRequestRoute(ApiPath.trades), controller.getAll);
-  router.post('/', recordRequestRoute(ApiPath.trades), json(), controller.create);
+  router.post('/', ...tradeMiddlewarePipeline(ApiPath.trades), controller.create);
+  router.patch(
+    '/:tradeId',
+    ...tradeMiddlewarePipeline(`${ApiPath.trades}/:tradeId`),
+    controller.amend,
+  );
   return router;
 }

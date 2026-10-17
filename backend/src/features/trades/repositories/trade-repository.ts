@@ -1,4 +1,12 @@
-import type { CreateTradeInput, Trade, TradeSide, TradeStatus } from '../models/trade.ts';
+import { Prisma } from '@prisma/client';
+import type {
+  AmendTradeInput,
+  CreateTradeInput,
+  Trade,
+  TradeSide,
+  TradeStatus,
+} from '../models/trade.ts';
+import { TradeNotAmendableError, TradeNotFoundError } from '../trade-errors.ts';
 
 export interface PersistedTrade {
   readonly id: string;
@@ -25,16 +33,24 @@ export interface PersistedTradeCreateData {
   readonly counterparty: string | null;
 }
 
+export type PersistedTradeUpdateData = Partial<PersistedTradeCreateData>;
+
 export interface TradeWriteDatabase {
   trade: {
     findMany(): Promise<PersistedTrade[]>;
+    findUnique(args: { where: { id: string } }): Promise<PersistedTrade | null>;
     create(args: { data: PersistedTradeCreateData }): Promise<PersistedTrade>;
+    update(args: {
+      where: { id: string; status: TradeStatus };
+      data: PersistedTradeUpdateData;
+    }): Promise<PersistedTrade>;
   };
 }
 
 export interface TradeRepositoryContract {
   findAll(): Promise<Trade[]>;
   create(input: CreateTradeInput): Promise<Trade>;
+  amend(id: string, input: AmendTradeInput): Promise<Trade>;
 }
 
 export class TradeRepository implements TradeRepositoryContract {
@@ -62,6 +78,37 @@ export class TradeRepository implements TradeRepositoryContract {
     });
 
     return this.toDomainTrade(persistedTrade);
+  }
+
+  async amend(id: string, input: AmendTradeInput): Promise<Trade> {
+    const { tradeDate, ...tradeFields } = input;
+    const updateData: PersistedTradeUpdateData = {
+      ...tradeFields,
+      ...(tradeDate === undefined ? {} : { tradeDate: new Date(tradeDate) }),
+    };
+
+    try {
+      const persistedTrade = await this.database.trade.update({
+        where: { id, status: 'ACTIVE' },
+        data: updateData,
+      });
+
+      return this.toDomainTrade(persistedTrade);
+    } catch (error: unknown) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2025') {
+        throw error;
+      }
+
+      const existingTrade = await this.database.trade.findUnique({ where: { id } });
+      if (existingTrade === null) {
+        throw new TradeNotFoundError(id, { cause: error });
+      }
+      if (existingTrade.status === 'CANCELLED') {
+        throw new TradeNotAmendableError(id, { cause: error });
+      }
+
+      throw error;
+    }
   }
 
   private toDomainTrade(trade: PersistedTrade): Trade {
