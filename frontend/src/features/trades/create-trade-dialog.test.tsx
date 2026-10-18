@@ -93,7 +93,7 @@ describe('CreateTradeDialog', () => {
       book: 'EQUITIES',
       counterparty: undefined,
     });
-    expect(submittedInput?.tradeDate).toMatch(/^2026-10-14T/);
+    expect(submittedInput?.tradeTimestamp).toMatch(/^2026-10-14T/);
     expect(onClose).toHaveBeenCalledOnce();
     expect(screen.getByRole('textbox', { name: 'Symbol' })).toHaveValue('');
   });

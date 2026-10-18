@@ -12,7 +12,7 @@ const sampleTrade: Trade = {
   price: 227.45,
   side: 'BUY',
   trader: 'JSMITH',
-  tradeDate: '2026-08-18T09:15:23Z',
+  tradeTimestamp: '2026-08-18T09:15:23Z',
   status: 'ACTIVE',
   book: 'EQUITIES_UK',
   counterparty: 'Goldman Sachs',

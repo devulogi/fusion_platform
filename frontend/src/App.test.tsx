@@ -12,7 +12,7 @@ type TestTrade = {
   price: number;
   side: 'BUY' | 'SELL';
   trader: string;
-  tradeDate: string;
+  tradeTimestamp: string;
   status: 'ACTIVE' | 'CANCELLED';
   book: string | null;
   counterparty: string | null;
@@ -84,7 +84,7 @@ const activeTrade: TestTrade = {
   price: 185.25,
   side: 'BUY',
   trader: 'Alex Morgan',
-  tradeDate: '2026-10-14T12:00:00.000Z',
+  tradeTimestamp: '2026-10-14T12:00:00.000Z',
   status: 'ACTIVE',
   book: null,
   counterparty: null,

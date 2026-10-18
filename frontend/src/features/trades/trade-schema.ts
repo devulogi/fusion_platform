@@ -8,7 +8,7 @@ export const tradeSchema = z
     price: z.number(),
     side: z.enum(['BUY', 'SELL']),
     trader: z.string(),
-    tradeDate: z.string(),
+    tradeTimestamp: z.string(),
     status: z.enum(['ACTIVE', 'CANCELLED']),
     book: z.string().nullable(),
     counterparty: z.string().nullable(),

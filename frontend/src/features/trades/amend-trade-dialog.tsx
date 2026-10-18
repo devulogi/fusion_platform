@@ -32,7 +32,7 @@ const amendTradeFormSchema = z
       .trim()
       .min(1, 'Enter a trader')
       .max(32, 'Trader must be 32 characters or fewer'),
-    tradeDate: z
+    tradeTimestamp: z
       .string()
       .min(1, 'Enter a trade date')
       .refine((value) => Number.isFinite(Date.parse(value)), 'Enter a valid trade date'),
@@ -49,7 +49,7 @@ const emptyFormValues: AmendTradeFormValues = {
   price: 0,
   side: 'BUY',
   trader: '',
-  tradeDate: '',
+  tradeTimestamp: '',
   book: '',
   counterparty: '',
 };
@@ -67,7 +67,7 @@ function toFormValues(trade: Trade): AmendTradeFormValues {
     price: trade.price,
     side: trade.side,
     trader: trade.trader,
-    tradeDate: toLocalDateTime(trade.tradeDate),
+    tradeTimestamp: toLocalDateTime(trade.tradeTimestamp),
     book: trade.book ?? '',
     counterparty: trade.counterparty ?? '',
   };
@@ -136,7 +136,7 @@ export default function AmendTradeDialog({
       price: values.price,
       side: values.side,
       trader: values.trader,
-      tradeDate: new Date(values.tradeDate).toISOString(),
+      tradeTimestamp: new Date(values.tradeTimestamp).toISOString(),
       book: values.book.trim() || null,
       counterparty: values.counterparty.trim() || null,
     };
@@ -294,16 +294,16 @@ export default function AmendTradeDialog({
             <label className={labelClassName}>
               Trade date
               <input
-                aria-describedby={errors.tradeDate ? 'amend-trade-date-error' : undefined}
-                aria-invalid={Boolean(errors.tradeDate)}
+                aria-describedby={errors.tradeTimestamp ? 'amend-trade-date-error' : undefined}
+                aria-invalid={Boolean(errors.tradeTimestamp)}
                 className={fieldClassName}
                 disabled={isPending}
                 type="datetime-local"
-                {...register('tradeDate')}
+                {...register('tradeTimestamp')}
               />
-              {errors.tradeDate && (
+              {errors.tradeTimestamp && (
                 <span className="text-xs font-normal text-red-600" id="amend-trade-date-error">
-                  {errors.tradeDate.message}
+                  {errors.tradeTimestamp.message}
                 </span>
               )}
             </label>
