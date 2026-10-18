@@ -21,10 +21,6 @@ export class TradeEventPublisher {
     this.publish(TradeEventType.CANCELLED, trade);
   }
 
-  publishTradeReactivated(trade: Trade): void {
-    this.publish(TradeEventType.REACTIVATED, trade);
-  }
-
   private publish(type: TradeChangedEvent['type'], trade: Trade): void {
     const event: TradeChangedEvent = { type, trade: { ...trade } };
     for (const listener of this.listeners) {
