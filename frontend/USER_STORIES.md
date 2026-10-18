@@ -14,7 +14,7 @@ These stories translate the full-stack take-home assessment into frontend workfl
 - The browser uses the Vite `/api` proxy for backend calls and the backend's REST/SSE contracts; it never connects directly to PostgreSQL.
 - TanStack Query owns server state for the trade snapshot. React Context is reserved for client state genuinely shared across components, such as SSE connection status. Component-local state owns form drafts and transient UI state.
 - REST responses are authoritative for the initiating action; SSE delivers committed changes to other connected clients. Applying the same trade from both paths must upsert by trade ID rather than create duplicates.
-- The assessment's required core model is `id`, `symbol`, `quantity`, `price`, `side`, `trader`, `tradeDate`, and `status`. The sample's `book` and `counterparty` fields may also be shown when present.
+- The assessment's required core model is `id`, `symbol`, `quantity`, `price`, `side`, `trader`, `tradeTimestamp`, and `status`. The sample's `book` and `counterparty` fields may also be shown when present.
 - Backend reactivation support exists, but reactivation is not required by the supplied assessment. Do not add a reactivation control unless explicitly approved.
 - Storybook is configured for reusable component exploration. MSW and Playwright are not configured; request approval before adding their dependencies or project setup.
 

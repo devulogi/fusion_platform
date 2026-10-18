@@ -41,7 +41,7 @@ const tradeColumns = [
     cell: ({ getValue }) => getValue().toFixed(2),
   }),
   columnHelper.accessor('trader', { header: 'Trader' }),
-  columnHelper.accessor('tradeDate', {
+  columnHelper.accessor('tradeTimestamp', {
     header: 'Trade date',
     cell: ({ getValue }) => getValue().slice(0, 10),
   }),
@@ -73,7 +73,7 @@ const columnLabels: Record<string, string> = {
   quantity: 'Quantity',
   price: 'Price',
   trader: 'Trader',
-  tradeDate: 'Trade date',
+  tradeTimestamp: 'Trade date',
   status: 'Status',
   book: 'Book',
   counterparty: 'Counterparty',

@@ -19,7 +19,7 @@ const createTradeFormSchema = z
       errorMap: () => ({ message: 'Select a side' }),
     }),
     trader: z.string().trim().min(1, 'Enter a trader').max(32, 'Use 32 characters or fewer'),
-    tradeDate: z
+    tradeTimestamp: z
       .string()
       .min(1, 'Enter a trade date and time')
       .refine((value) => !Number.isNaN(Date.parse(value)), 'Enter a valid trade date and time')
@@ -70,7 +70,7 @@ export default function CreateTradeDialog({
       symbol: '',
       side: undefined,
       trader: '',
-      tradeDate: '',
+      tradeTimestamp: '',
       status: undefined,
       book: '',
       counterparty: '',
@@ -250,15 +250,15 @@ export default function CreateTradeDialog({
             </div>
 
             <div className={labelClassName}>
-              <label htmlFor="tradeDate">Trade date and time</label>
+              <label htmlFor="tradeTimestamp">Trade date and time</label>
               <input
-                {...register('tradeDate')}
-                {...fieldAttributes('tradeDate')}
+                {...register('tradeTimestamp')}
+                {...fieldAttributes('tradeTimestamp')}
                 className={inputClassName}
-                id="tradeDate"
+                id="tradeTimestamp"
                 type="datetime-local"
               />
-              {renderError('tradeDate')}
+              {renderError('tradeTimestamp')}
             </div>
 
             <div className={labelClassName}>

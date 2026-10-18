@@ -13,7 +13,7 @@ const sampleTrade: Trade = {
   price: 227.45,
   side: 'BUY',
   trader: 'JSMITH',
-  tradeDate: '2026-08-18T09:15:23.000Z',
+  tradeTimestamp: '2026-08-18T09:15:23.000Z',
   status: 'ACTIVE',
   book: 'EQUITIES_UK',
   counterparty: 'Goldman Sachs',
@@ -76,7 +76,7 @@ describe('AmendTradeDialog', () => {
       price: 227.45,
       side: 'BUY',
       trader: 'JSMITH',
-      tradeDate: '2026-08-18T09:15:00.000Z',
+      tradeTimestamp: '2026-08-18T09:15:00.000Z',
       book: 'EQUITIES_UK',
       counterparty: 'Goldman Sachs',
     });
