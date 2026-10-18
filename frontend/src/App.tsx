@@ -1,32 +1,15 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { z } from 'zod';
 import { useConnectionStatus } from './contexts/connection-status-context';
+import TradeBlotterTable from './features/trades/trade-blotter-table';
+import {
+  tradeCollectionSchema,
+  tradeEventTypes,
+  tradeSchema,
+} from './features/trades/trade-schema';
+import type { Trade } from './features/trades/trade-schema';
 
-const tradeSchema = z
-  .object({
-    id: z.string(),
-    symbol: z.string(),
-    quantity: z.number(),
-    price: z.number(),
-    side: z.enum(['BUY', 'SELL']),
-    trader: z.string(),
-    tradeDate: z.string(),
-    status: z.enum(['ACTIVE', 'CANCELLED']),
-    book: z.string().nullable(),
-    counterparty: z.string().nullable(),
-  })
-  .strict();
-
-const tradeCollectionSchema = z.object({ items: z.array(tradeSchema) }).strict();
-const tradeEventTypes = [
-  'trade.created',
-  'trade.amended',
-  'trade.cancelled',
-  'trade.reactivated',
-] as const;
 const tradeQueryKey = ['trades'] as const;
-type Trade = z.infer<typeof tradeSchema>;
 
 async function fetchTradeSnapshot(): Promise<Trade[]> {
   const response = await fetch('/api/v1/trades');
@@ -53,6 +36,7 @@ function App() {
   const {
     data: trades = [],
     isError: snapshotUnavailable,
+    isFetched,
     refetch: refetchTrades,
   } = useQuery({
     queryKey: tradeQueryKey,
@@ -188,75 +172,11 @@ function App() {
           </p>
         )}
 
-        <div className="overflow-x-auto border-y border-[#d9dfd9] bg-white">
-          <table className="w-full min-w-[760px] border-collapse text-left text-sm">
-            <thead className="bg-[#e9eeea] text-xs uppercase text-[#58665e]">
-              <tr>
-                <th className="px-4 py-3 font-semibold" scope="col">
-                  Symbol
-                </th>
-                <th className="px-4 py-3 font-semibold" scope="col">
-                  Side
-                </th>
-                <th className="px-4 py-3 text-right font-semibold" scope="col">
-                  Quantity
-                </th>
-                <th className="px-4 py-3 text-right font-semibold" scope="col">
-                  Price
-                </th>
-                <th className="px-4 py-3 font-semibold" scope="col">
-                  Trader
-                </th>
-                <th className="px-4 py-3 font-semibold" scope="col">
-                  Trade date
-                </th>
-                <th className="px-4 py-3 font-semibold" scope="col">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#e6eae6]">
-              {trades.map((trade) => (
-                <tr key={trade.id}>
-                  <td className="px-4 py-3 font-semibold">{trade.symbol}</td>
-                  <td
-                    className={
-                      trade.side === 'BUY' ? 'px-4 py-3 text-[#137a61]' : 'px-4 py-3 text-[#b25343]'
-                    }
-                  >
-                    {trade.side}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {trade.quantity.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">{trade.price.toFixed(2)}</td>
-                  <td className="px-4 py-3">{trade.trader}</td>
-                  <td className="px-4 py-3 tabular-nums">{trade.tradeDate.slice(0, 10)}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={
-                        trade.status === 'ACTIVE'
-                          ? 'font-medium text-[#137a61]'
-                          : 'font-medium text-[#7a6253]'
-                      }
-                    >
-                      {trade.status === 'ACTIVE' ? 'Active' : 'Cancelled'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {trades.length === 0 && (
-                <tr>
-                  <td className="px-4 py-10 text-center text-[#69756e]" colSpan={7}>
-                    {snapshotUnavailable
-                      ? 'No snapshot available'
-                      : 'Waiting for the trade snapshot'}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <TradeBlotterTable
+          trades={trades}
+          isLoading={!isFetched && !snapshotUnavailable}
+          emptyMessage={snapshotUnavailable ? 'No snapshot available' : 'No trades yet'}
+        />
       </section>
     </main>
   );

@@ -22,7 +22,7 @@ These stories translate the full-stack take-home assessment into frontend workfl
 
 ### 1. View the trade blotter
 
-**Status:** Partially implemented
+**Status:** Implemented
 
 As a blotter user, I want to see persisted trades in a readable table so I can review current trading activity.
 
@@ -34,7 +34,7 @@ As a blotter user, I want to see persisted trades in a readable table so I can r
 - Loading, empty, and snapshot-error states are communicated clearly without exposing internal errors.
 - The layout remains usable at narrow viewport widths; essential information and row actions are not silently lost.
 
-**Current implementation:** The page fetches and displays the collection after the SSE connection opens, shows a waiting/empty state, and reports snapshot failure. Sorting, filtering, refresh controls, and trade actions remain unimplemented.
+**Implementation:** The page fetches and displays the collection after the SSE connection opens. A feature-local TanStack Table component displays all required trade fields and optional book/counterparty values, uses layout-matching loading skeletons, and presents empty and snapshot-error states. On narrow viewports the table scrolls within its wrapper without widening the page. Sorting, filtering, refresh controls, and trade actions remain unimplemented in their separate stories.
 
 ### 2. Sort, filter, and refresh trades
 
