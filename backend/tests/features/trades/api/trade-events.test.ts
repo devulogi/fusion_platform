@@ -86,7 +86,7 @@ describe('GET /api/v1/events', () => {
         price: 185.25,
         side: 'BUY' as const,
         trader: 'Alex Morgan',
-        tradeDate: '2026-10-14T12:00:00.000Z',
+        tradeTimestamp: '2026-10-14T12:00:00.000Z',
         status: 'ACTIVE' as const,
       };
 

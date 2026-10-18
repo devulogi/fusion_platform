@@ -9,7 +9,7 @@ export function serializeTrade(trade: Trade): TradeResponse {
     price: trade.price,
     side: trade.side,
     trader: trade.trader,
-    tradeDate: trade.tradeDate,
+    tradeTimestamp: trade.tradeTimestamp,
     status: trade.status,
     book: trade.book ?? null,
     counterparty: trade.counterparty ?? null,

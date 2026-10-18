@@ -66,7 +66,7 @@ describe('GET /api/trades', () => {
         price: 185.25,
         side: 'BUY',
         trader: 'Alex Morgan',
-        tradeDate: '2026-10-14T12:00:00.000Z',
+        tradeTimestamp: '2026-10-14T12:00:00.000Z',
         status: 'ACTIVE',
       },
       {
@@ -76,7 +76,7 @@ describe('GET /api/trades', () => {
         price: 420.5,
         side: 'SELL',
         trader: 'Jamie Lee',
-        tradeDate: '2026-10-14T13:00:00.000Z',
+        tradeTimestamp: '2026-10-14T13:00:00.000Z',
         status: 'CANCELLED',
       },
     ]);
@@ -93,7 +93,7 @@ describe('GET /api/trades', () => {
           price: 185.25,
           side: 'BUY',
           trader: 'Alex Morgan',
-          tradeDate: '2026-10-14T12:00:00.000Z',
+          tradeTimestamp: '2026-10-14T12:00:00.000Z',
           status: 'ACTIVE',
           book: null,
           counterparty: null,
@@ -105,7 +105,7 @@ describe('GET /api/trades', () => {
           price: 420.5,
           side: 'SELL',
           trader: 'Jamie Lee',
-          tradeDate: '2026-10-14T13:00:00.000Z',
+          tradeTimestamp: '2026-10-14T13:00:00.000Z',
           status: 'CANCELLED',
           book: null,
           counterparty: null,
@@ -136,7 +136,7 @@ describe('GET /api/trades', () => {
         price: 185.25,
         side: 'BUY' as const,
         trader: `Trader ${index}`,
-        tradeDate: '2026-10-14T12:00:00.000Z',
+        tradeTimestamp: '2026-10-14T12:00:00.000Z',
         status: 'ACTIVE' as const,
       })),
     );
@@ -177,7 +177,7 @@ describe('GET /api/trades', () => {
       price: 185.25,
       side: 'BUY',
       trader: 'Alex Morgan',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE',
     };
     const createTrade = vi.fn<TradeRepositoryContract['create']>().mockResolvedValue(createdTrade);
@@ -196,7 +196,7 @@ describe('GET /api/trades', () => {
         price: 185.25,
         side: 'BUY',
         trader: ' Alex Morgan ',
-        tradeDate: '2026-10-14T12:00:00.000Z',
+        tradeTimestamp: '2026-10-14T12:00:00.000Z',
         status: 'ACTIVE',
       });
 
@@ -208,7 +208,7 @@ describe('GET /api/trades', () => {
       price: 185.25,
       side: 'BUY',
       trader: 'Alex Morgan',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE',
       book: null,
       counterparty: null,
@@ -219,7 +219,7 @@ describe('GET /api/trades', () => {
       price: 185.25,
       side: 'BUY',
       trader: 'Alex Morgan',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE',
     });
     expect(tradeCache.getAll()).toEqual([createdTrade]);
@@ -240,7 +240,7 @@ describe('GET /api/trades', () => {
       price: 185.25,
       side: 'BUY',
       trader: 'Alex Morgan',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE',
     };
     const tradeRepository: TradeRepositoryContract = {
@@ -262,7 +262,7 @@ describe('GET /api/trades', () => {
           price: 185.25,
           side: 'BUY',
           trader: 'Alex Morgan',
-          tradeDate: '2026-10-14T12:00:00.000Z',
+          tradeTimestamp: '2026-10-14T12:00:00.000Z',
           status: 'ACTIVE',
         });
 
@@ -313,7 +313,7 @@ describe('GET /api/v1/trades/:tradeId', () => {
     price: 185.25,
     side: 'BUY',
     trader: 'Alex Morgan',
-    tradeDate: '2026-10-14T12:00:00.000Z',
+    tradeTimestamp: '2026-10-14T12:00:00.000Z',
     status: 'ACTIVE',
   };
 
@@ -364,7 +364,7 @@ describe('PATCH /api/v1/trades/:tradeId', () => {
     price: 185.25,
     side: 'BUY',
     trader: 'Alex Morgan',
-    tradeDate: '2026-10-14T12:00:00.000Z',
+    tradeTimestamp: '2026-10-14T12:00:00.000Z',
     status: 'ACTIVE',
   };
 

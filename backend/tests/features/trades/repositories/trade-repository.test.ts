@@ -11,7 +11,7 @@ const persistedTrade: PersistedTrade = {
   price: { toNumber: () => 185.25 },
   side: 'BUY',
   trader: 'Alex Morgan',
-  tradeDate: new Date('2026-10-14T12:00:00.000Z'),
+  tradeTimestamp: new Date('2026-10-14T12:00:00.000Z'),
   status: 'ACTIVE',
   book: null,
   counterparty: null,
@@ -40,7 +40,7 @@ describe('TradeRepository', () => {
         price: 185.25,
         side: 'BUY',
         trader: 'Alex Morgan',
-        tradeDate: '2026-10-14T12:00:00.000Z',
+        tradeTimestamp: '2026-10-14T12:00:00.000Z',
         status: 'ACTIVE',
       },
     ]);
@@ -83,7 +83,7 @@ describe('TradeRepository', () => {
       price: 185.25,
       side: 'BUY' as const,
       trader: 'Alex Morgan',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE' as const,
     };
 
@@ -96,7 +96,7 @@ describe('TradeRepository', () => {
     expect(create).toHaveBeenCalledWith({
       data: {
         ...input,
-        tradeDate: new Date(input.tradeDate),
+        tradeTimestamp: new Date(input.tradeTimestamp),
         book: null,
         counterparty: null,
       },
@@ -123,7 +123,7 @@ describe('TradeRepository', () => {
         price: 12,
         side: 'BUY',
         trader: 'Alex',
-        tradeDate: '2026-10-14T12:00:00.000Z',
+        tradeTimestamp: '2026-10-14T12:00:00.000Z',
         status: 'ACTIVE',
       }),
     ).rejects.toBe(failure);
@@ -149,7 +149,7 @@ describe('TradeRepository', () => {
     const input = {
       symbol: 'MSFT',
       price: 420.5,
-      tradeDate: '2026-10-15T10:30:00.000Z',
+      tradeTimestamp: '2026-10-15T10:30:00.000Z',
       book: 'EQUITIES_US',
     };
 
@@ -160,7 +160,7 @@ describe('TradeRepository', () => {
       price: 420.5,
       side: 'BUY',
       trader: 'Alex Morgan',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE',
       book: 'EQUITIES_US',
     });
@@ -169,7 +169,7 @@ describe('TradeRepository', () => {
       data: {
         symbol: 'MSFT',
         price: 420.5,
-        tradeDate: new Date(input.tradeDate),
+        tradeTimestamp: new Date(input.tradeTimestamp),
         book: 'EQUITIES_US',
       },
     });
@@ -239,7 +239,7 @@ describe('TradeRepository', () => {
         price: 185.25,
         side: 'BUY',
         trader: 'Alex Morgan',
-        tradeDate: '2026-10-14T12:00:00.000Z',
+        tradeTimestamp: '2026-10-14T12:00:00.000Z',
         status: 'CANCELLED',
       },
       changed: true,
@@ -276,7 +276,7 @@ describe('TradeRepository', () => {
         price: 185.25,
         side: 'BUY',
         trader: 'Alex Morgan',
-        tradeDate: '2026-10-14T12:00:00.000Z',
+        tradeTimestamp: '2026-10-14T12:00:00.000Z',
         status: 'CANCELLED',
       },
       changed: false,

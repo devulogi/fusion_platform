@@ -24,10 +24,10 @@ model Trade {
   price        Decimal     @db.Decimal(18, 4)
   side         TradeSide
   trader       String      @db.VarChar(32)
-  tradeDate    DateTime    @db.Timestamptz(3)
+  tradeTimestamp DateTime    @db.Timestamptz(3)
   status       TradeStatus @default(ACTIVE)
   book         String?     @db.VarChar(64)
   counterparty String?     @db.VarChar(120)
 
-  @@index([tradeDate])
+  @@index([tradeTimestamp])
 }

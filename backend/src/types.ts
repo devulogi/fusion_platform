@@ -54,7 +54,7 @@ export type Trade = {
   readonly price: number;
   readonly side: TradeSide;
   readonly trader: string;
-  readonly tradeDate: string;
+  readonly tradeTimestamp: string;
   readonly status: TradeStatus;
   readonly book?: string;
   readonly counterparty?: string;
@@ -86,7 +86,7 @@ export type PersistedTrade = {
   readonly price: { toNumber(): number };
   readonly side: TradeSide;
   readonly trader: string;
-  readonly tradeDate: Date;
+  readonly tradeTimestamp: Date;
   readonly status: TradeStatus;
   readonly book: string | null;
   readonly counterparty: string | null;
@@ -98,7 +98,7 @@ export type PersistedTradeCreateData = {
   readonly price: number;
   readonly side: TradeSide;
   readonly trader: string;
-  readonly tradeDate: Date;
+  readonly tradeTimestamp: Date;
   readonly status: TradeStatus;
   readonly book: string | null;
   readonly counterparty: string | null;

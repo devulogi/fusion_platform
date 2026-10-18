@@ -29,7 +29,7 @@ export class TradeRepository implements TradeRepositoryContract {
         price: input.price,
         side: input.side,
         trader: input.trader,
-        tradeDate: new Date(input.tradeDate),
+        tradeTimestamp: new Date(input.tradeTimestamp),
         status: input.status ?? TRADE_STATUS.ACTIVE,
         book: input.book ?? null,
         counterparty: input.counterparty ?? null,
@@ -40,10 +40,10 @@ export class TradeRepository implements TradeRepositoryContract {
   }
 
   async amend(id: string, input: AmendTradeInput): Promise<Trade> {
-    const { tradeDate, ...tradeFields } = input;
+    const { tradeTimestamp, ...tradeFields } = input;
     const updateData: PersistedTradeUpdateData = {
       ...tradeFields,
-      ...(tradeDate === undefined ? {} : { tradeDate: new Date(tradeDate) }),
+      ...(tradeTimestamp === undefined ? {} : { tradeTimestamp: new Date(tradeTimestamp) }),
     };
 
     try {
@@ -103,7 +103,7 @@ export class TradeRepository implements TradeRepositoryContract {
       price: trade.price.toNumber(),
       side: trade.side,
       trader: trade.trader,
-      tradeDate: trade.tradeDate.toISOString(),
+      tradeTimestamp: trade.tradeTimestamp.toISOString(),
       status: trade.status,
       ...(trade.book === null ? {} : { book: trade.book }),
       ...(trade.counterparty === null ? {} : { counterparty: trade.counterparty }),

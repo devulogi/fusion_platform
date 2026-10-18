@@ -9,7 +9,7 @@ These stories translate the take-home requirements into backend behavior. Implem
 - The API returns the full trade collection as `{ items }`, expected to contain approximately 100–1,000 records. Sorting and filtering are client-side; redundant counts and pagination metadata are omitted.
 - PostgreSQL is the system of record. A process-local `Map<TradeId, Trade>` is a disposable read cache and is hydrated from the database.
 - Clients send create, amend, and cancel commands through REST. Server-to-client changes are delivered over SSE.
-- The persisted trade contract uses the assessment's required fields: ID, symbol, side, quantity, price, trader, trade date, and status. Book and counterparty are optional sample-data fields.
+- The persisted trade contract uses the assessment's required fields: ID, symbol, side, quantity, price, trader, trade timestamp, and status. Book and counterparty are optional sample-data fields.
 - Confirmed for Story 5: cancelled trades cannot be amended. Amendments do not use version-based optimistic concurrency.
 - Confirmed for Story 5: cancellation is terminal; the backend does not accept a direct transition from `CANCELLED` to `ACTIVE`.
 - Confirmed for Story 6: repeated cancellation is idempotent, returns HTTP `200`, and does not publish a duplicate event.
