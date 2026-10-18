@@ -37,7 +37,7 @@ describe('TradeService', () => {
       price: 185.25,
       side: 'BUY' as const,
       trader: 'Alex Morgan',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE' as const,
     };
     tradeCache.hydrate([trade]);
@@ -55,7 +55,7 @@ describe('TradeService', () => {
       price: 185.25,
       side: 'BUY',
       trader: 'Alex Morgan',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE',
     };
     const savedTrade: Trade = { id: 'generated-id', ...input };
@@ -112,7 +112,7 @@ describe('TradeService', () => {
         price: 185.25,
         side: 'BUY',
         trader: 'Alex Morgan',
-        tradeDate: '2026-10-14T12:00:00.000Z',
+        tradeTimestamp: '2026-10-14T12:00:00.000Z',
         status: 'ACTIVE',
       }),
     ).rejects.toBe(persistenceError);
@@ -140,7 +140,7 @@ describe('TradeService', () => {
         price: 185.25,
         side: 'BUY',
         trader: 'Alex Morgan',
-        tradeDate: '2026-10-14T12:00:00.000Z',
+        tradeTimestamp: '2026-10-14T12:00:00.000Z',
         status: 'ACTIVE',
       }),
     ).rejects.toThrow(TradeCacheNotHydratedError);
@@ -156,7 +156,7 @@ describe('TradeService', () => {
       price: 185.25,
       side: 'BUY',
       trader: 'Alex Morgan',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE',
     };
     tradeCache.hydrate([existingTrade]);
@@ -197,7 +197,7 @@ describe('TradeService', () => {
       price: 185.25,
       side: 'BUY',
       trader: 'Alex Morgan',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE',
     };
     const tradeCache = new TradeCache();
@@ -234,7 +234,7 @@ describe('TradeService', () => {
       price: 185.25,
       side: 'BUY',
       trader: 'Alex Morgan',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE',
     };
     const cancelledTrade: Trade = { ...activeTrade, status: 'CANCELLED' };
@@ -275,7 +275,7 @@ describe('TradeService', () => {
       price: 185.25,
       side: 'BUY',
       trader: 'Alex Morgan',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE',
     };
     const cancelledTrade: Trade = { ...activeTrade, status: 'CANCELLED' };
@@ -310,7 +310,7 @@ describe('TradeService', () => {
       price: 185.25,
       side: 'BUY',
       trader: 'Alex Morgan',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE',
     };
     const tradeCache = new TradeCache();
@@ -356,7 +356,7 @@ describe('TradeService', () => {
         price: 185.25,
         side: 'BUY',
         trader: 'Alex Morgan',
-        tradeDate: '2026-10-14T12:00:00.000Z',
+        tradeTimestamp: '2026-10-14T12:00:00.000Z',
         status: 'ACTIVE',
       }),
     ).rejects.toMatchObject({ name: 'TradeInputValidationError' });
@@ -372,7 +372,7 @@ describe('TradeService', () => {
       price: 12,
       side: 'BUY',
       trader: ' Alex ',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE',
     };
     const savedTrade: Trade = { ...input, id: 'saved', symbol: 'AAPL', trader: 'Alex' };
@@ -401,7 +401,7 @@ describe('TradeService', () => {
       price: 12,
       side: 'BUY' as const,
       trader: 'Alex',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE' as const,
     };
     cache.hydrate([original]);

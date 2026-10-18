@@ -187,7 +187,7 @@ describe('Request errors and traceability', () => {
       price: 12,
       side: 'BUY',
       trader: 'Alex',
-      tradeDate: '2026-10-14T12:00:00.000Z',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
       status: 'ACTIVE',
     });
     const body = internalServerErrorSchema.parse(response.body);
@@ -228,7 +228,7 @@ describe('Request errors and traceability', () => {
         price: 12,
         side: 'BUY',
         trader: 'Alex',
-        tradeDate: '2026-10-14T12:00:00.000Z',
+        tradeTimestamp: '2026-10-14T12:00:00.000Z',
         status: 'ACTIVE',
       },
     ]);
