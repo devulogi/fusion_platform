@@ -101,10 +101,34 @@ The backend publishes `trade.created`, `trade.amended`, `trade.cancelled`, and `
 
 The proposed backend workflows and acceptance criteria are documented in [backend/USER_STORIES.md](backend/USER_STORIES.md).
 
-### Frontend
+### Frontend Structure
 
-- Vite serves the app directly in development to provide hot module replacement; the production Dockerfile uses Nginx to serve the built static assets.
-- React and TypeScript power the live trade blotter; TanStack Table and form dependencies remain available for future sorting, filtering, and trade-entry workflows.
+The frontend currently uses a compact `App.tsx` entry and colocated tests. As the assessment workflows grow, organize code by application shell and business feature rather than by global component type. This is the recommended destination, not a claim that every directory already exists:
+
+```text
+frontend/src/
+├── app/
+│   ├── App.tsx
+│   └── providers.tsx
+├── features/
+│   └── trades/
+│       ├── api/
+│       ├── components/
+│       ├── hooks/
+│       └── schemas.ts
+├── shared/
+│   ├── components/
+│   ├── hooks/
+│   └── lib/
+├── test/
+│   └── mocks/
+├── index.css
+└── main.tsx
+```
+
+Keep trade-specific API access, query hooks, schemas, and UI within `features/trades/`; reserve `shared/` for code used by multiple features. Keep tests and Storybook stories beside the component or hook they exercise (`*.test.tsx`, `*.stories.tsx`); put shared MSW handlers under `test/mocks/` when that tooling is approved and configured. Add subfolders only when there are related files to group. Keep providers and application-wide error handling in `app/`, and let `main.tsx` remain the browser entry point.
+
+Use TanStack Query for server-state caching and mutations, React Context for genuinely shared client state, TanStack Table for grid interactions, and React Hook Form/Zod for forms and validation. Do not mirror query-owned trade data in Context. Continue using the Vite `/api` proxy for browser requests. Vite provides development hot module replacement; the production Dockerfile uses Nginx to serve the built static assets.
 
 ## Prerequisites
 

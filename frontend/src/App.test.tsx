@@ -1,6 +1,9 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
+import { AppErrorBoundary } from './components/app-error-boundary';
+import { ConnectionStatusProvider } from './contexts/connection-status-provider';
 
 type TestTrade = {
   id: string;
@@ -83,6 +86,17 @@ function installFetchMock() {
   return fetchMock;
 }
 
+function renderApp() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ConnectionStatusProvider>
+        <App />
+      </ConnectionStatusProvider>
+    </QueryClientProvider>,
+  );
+}
+
 beforeEach(() => {
   MockEventSource.instances = [];
   vi.stubGlobal('EventSource', MockEventSource);
@@ -91,6 +105,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('App', () => {
@@ -98,7 +113,7 @@ describe('App', () => {
     const fetchMock = installFetchMock();
     const snapshot = deferred<Response>();
     fetchMock.mockReturnValueOnce(snapshot.promise);
-    render(<App />);
+    renderApp();
     const eventSource = MockEventSource.instances[0];
     if (eventSource === undefined) throw new Error('Expected an EventSource connection');
 
@@ -120,7 +135,7 @@ describe('App', () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ items: [activeTrade] }))
       .mockReturnValueOnce(reconnectSnapshot.promise);
-    render(<App />);
+    renderApp();
     const eventSource = MockEventSource.instances[0];
     if (eventSource === undefined) throw new Error('Expected an EventSource connection');
 
@@ -140,12 +155,37 @@ describe('App', () => {
 
   it('closes the event stream when unmounted', () => {
     installFetchMock();
-    const { unmount } = render(<App />);
+    const { unmount } = renderApp();
     const eventSource = MockEventSource.instances[0];
     if (eventSource === undefined) throw new Error('Expected an EventSource connection');
 
     unmount();
 
     expect(eventSource.close).toHaveBeenCalledOnce();
+  });
+
+  it('contains render failures and retries without exposing error details', async () => {
+    let shouldThrow = true;
+    const logError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    function FlakyView() {
+      if (shouldThrow) throw new Error('Sensitive render detail');
+      return <p>Recovered view</p>;
+    }
+
+    render(
+      <AppErrorBoundary>
+        <FlakyView />
+      </AppErrorBoundary>,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('This view could not be displayed');
+    expect(screen.queryByText('Sensitive render detail')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reload application' })).toBeInTheDocument();
+    expect(logError).toHaveBeenCalled();
+
+    shouldThrow = false;
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByText('Recovered view')).toBeInTheDocument();
   });
 });

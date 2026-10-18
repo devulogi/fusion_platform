@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
+import { useConnectionStatus } from './contexts/connection-status-context';
 
 const tradeSchema = z
   .object({
@@ -23,8 +25,19 @@ const tradeEventTypes = [
   'trade.cancelled',
   'trade.reactivated',
 ] as const;
+const tradeQueryKey = ['trades'] as const;
 type Trade = z.infer<typeof tradeSchema>;
-type ConnectionStatus = 'Connecting' | 'Live' | 'Reconnecting';
+
+async function fetchTradeSnapshot(): Promise<Trade[]> {
+  const response = await fetch('/api/v1/trades');
+  if (!response.ok) throw new Error('Trade snapshot request failed');
+
+  const payload: unknown = await response.json();
+  const result = tradeCollectionSchema.safeParse(payload);
+  if (!result.success) throw new Error('Trade snapshot response was invalid');
+
+  return result.data.items;
+}
 
 function upsertTrade(trades: Trade[], updatedTrade: Trade): Trade[] {
   const tradeIndex = trades.findIndex((trade) => trade.id === updatedTrade.id);
@@ -36,13 +49,22 @@ function upsertTrade(trades: Trade[], updatedTrade: Trade): Trade[] {
 }
 
 function App() {
-  const [trades, setTrades] = useState<Trade[]>([]);
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('Connecting');
-  const [snapshotUnavailable, setSnapshotUnavailable] = useState(false);
+  const queryClient = useQueryClient();
+  const {
+    data: trades = [],
+    isError: snapshotUnavailable,
+    refetch: refetchTrades,
+  } = useQuery({
+    queryKey: tradeQueryKey,
+    queryFn: fetchTradeSnapshot,
+    enabled: false,
+    retry: false,
+  });
+  const { connectionStatus, setConnectionStatus } = useConnectionStatus();
 
   useEffect(() => {
     let isMounted = true;
-    let hasLoadedSnapshot = false;
+    let hasLoadedSnapshot = queryClient.getQueryData<Trade[]>(tradeQueryKey) !== undefined;
     let snapshotLoading = false;
     let refreshQueued = false;
     let bufferedEvents: Trade[] = [];
@@ -58,27 +80,28 @@ function App() {
       do {
         refreshQueued = false;
         try {
-          const response = await fetch('/api/v1/trades');
-          if (!response.ok) throw new Error('Trade snapshot request failed');
-
-          const payload: unknown = await response.json();
-          const result = tradeCollectionSchema.safeParse(payload);
-          if (!result.success) throw new Error('Trade snapshot response was invalid');
+          const result = await refetchTrades();
+          if (result.isError || result.data === undefined) {
+            throw result.error ?? new Error('Trade snapshot request failed');
+          }
 
           const eventsDuringSnapshot = bufferedEvents;
           bufferedEvents = [];
           if (isMounted) {
-            setTrades(eventsDuringSnapshot.reduce(upsertTrade, result.data.items));
-            setSnapshotUnavailable(false);
+            queryClient.setQueryData(
+              tradeQueryKey,
+              eventsDuringSnapshot.reduce(upsertTrade, result.data),
+            );
             hasLoadedSnapshot = true;
           }
         } catch {
           if (isMounted) {
-            setSnapshotUnavailable(true);
             if (hasLoadedSnapshot && bufferedEvents.length > 0) {
               const eventsToApply = bufferedEvents;
               bufferedEvents = [];
-              setTrades((currentTrades) => eventsToApply.reduce(upsertTrade, currentTrades));
+              queryClient.setQueryData<Trade[]>(tradeQueryKey, (currentTrades) =>
+                eventsToApply.reduce(upsertTrade, currentTrades ?? []),
+              );
             }
           }
         }
@@ -102,7 +125,9 @@ function App() {
       if (snapshotLoading || !hasLoadedSnapshot) {
         bufferedEvents.push(result.data);
       } else {
-        setTrades((currentTrades) => upsertTrade(currentTrades, result.data));
+        queryClient.setQueryData<Trade[]>(tradeQueryKey, (currentTrades) =>
+          upsertTrade(currentTrades ?? [], result.data),
+        );
       }
     };
 
@@ -124,7 +149,7 @@ function App() {
       isMounted = false;
       eventSource.close();
     };
-  }, []);
+  }, [queryClient, refetchTrades, setConnectionStatus]);
 
   return (
     <main className="min-h-screen bg-[#f3f5f2] text-[#19251f]">
