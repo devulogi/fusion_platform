@@ -44,8 +44,9 @@ applyTo: "frontend/**"
 
 ## Testing and validation
 
-- Add or update focused tests for behavior changes. Use Storybook stories with MSW to document isolated reusable-component states and realistic mocked API responses. Use React Testing Library (RTL) for accessible, user-observable component behavior. Use Playwright through the actual application UI for a small number of critical end-to-end workflows when configured.
-- This repository currently has Vitest and Testing Library but does not configure Storybook, MSW, or Playwright. Ask the user before adding these dependencies, test runners, or project configuration; do not silently install or scaffold them.
+- Add or update focused tests for behavior changes. Storybook is configured with the React-Vite framework in `frontend/.storybook`; create stories alongside reusable components under `frontend/src/`. Use stories to explore visual variants and document meaningful states, including loading, empty, error, disabled, and interactive states where relevant. Reuse the app's Tailwind styles and preview backgrounds; do not create a parallel design system in Storybook.
+- Use React Testing Library (RTL) for accessible, user-observable component behavior. Use MSW for mocked API responses only after it is configured and approved. Use Playwright through the actual application UI for a small number of critical end-to-end workflows when configured.
+- Storybook dependencies and configuration are approved and present. MSW and Playwright are not configured; ask before adding those dependencies, test runners, or project configuration.
 - Run the relevant focused tests, then `npm --prefix frontend run lint` and `npm --prefix frontend run build` when code changes warrant them.
 - For user-facing UI changes, run the app and verify the affected workflow in a browser, including responsive layout, keyboard access, and meaningful loading/error states. Report environment blockers rather than claiming visual verification.
 - Keep test doubles typed and deterministic; avoid unnecessary wall-clock waits and external services.

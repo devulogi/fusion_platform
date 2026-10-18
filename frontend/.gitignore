@@ -4,6 +4,7 @@ node_modules/
 # Vite build output and cache
 dist/
 dist-ssr/
+storybook-static/
 .vite/
 
 # Test output

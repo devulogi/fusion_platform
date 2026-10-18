@@ -5,7 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'coverage/**', 'node_modules/**', '*.tsbuildinfo'] },
+  {
+    ignores: ['dist/**', 'storybook-static/**', 'coverage/**', 'node_modules/**', '*.tsbuildinfo'],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked.map((config) => ({
     ...config,
