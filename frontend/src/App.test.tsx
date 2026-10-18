@@ -153,6 +153,48 @@ describe('App', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Live');
   });
 
+  it('refreshes the snapshot on demand and shows the latest trades', async () => {
+    const fetchMock = installFetchMock();
+    const refreshedSnapshot = deferred<Response>();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ items: [activeTrade] }))
+      .mockReturnValueOnce(refreshedSnapshot.promise);
+    renderApp();
+    const eventSource = MockEventSource.instances[0];
+    if (eventSource === undefined) throw new Error('Expected an EventSource connection');
+
+    eventSource.open();
+    expect(await screen.findByRole('cell', { name: 'AAPL' })).toBeInTheDocument();
+    eventSource.onerror?.();
+    expect(screen.getByRole('button', { name: 'Refresh trades' })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh trades' }));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    refreshedSnapshot.resolve(jsonResponse({ items: [{ ...activeTrade, symbol: 'MSFT' }] }));
+
+    expect(await screen.findByRole('cell', { name: 'MSFT' })).toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: 'AAPL' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the last successful snapshot visible when manual refresh fails', async () => {
+    const fetchMock = installFetchMock();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ items: [activeTrade] }))
+      .mockRejectedValueOnce(new Error('Network unavailable'));
+    renderApp();
+    const eventSource = MockEventSource.instances[0];
+    if (eventSource === undefined) throw new Error('Expected an EventSource connection');
+
+    eventSource.open();
+    expect(await screen.findByRole('cell', { name: 'AAPL' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh trades' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Refresh failed. Showing the last successful snapshot.',
+    );
+    expect(screen.getByRole('cell', { name: 'AAPL' })).toBeInTheDocument();
+  });
+
   it('closes the event stream when unmounted', () => {
     installFetchMock();
     const { unmount } = renderApp();

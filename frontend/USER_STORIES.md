@@ -34,21 +34,23 @@ As a blotter user, I want to see persisted trades in a readable table so I can r
 - Loading, empty, and snapshot-error states are communicated clearly without exposing internal errors.
 - The layout remains usable at narrow viewport widths; essential information and row actions are not silently lost.
 
-**Implementation:** The page fetches and displays the collection after the SSE connection opens. A feature-local TanStack Table component displays all required trade fields and optional book/counterparty values, uses layout-matching loading skeletons, and presents empty and snapshot-error states. On narrow viewports the table scrolls within its wrapper without widening the page. Sorting, filtering, refresh controls, and trade actions remain unimplemented in their separate stories.
+**Implementation:** The page fetches and displays the collection after the SSE connection opens. A feature-local TanStack Table component displays all required trade fields and optional book/counterparty values, uses layout-matching loading skeletons, and presents empty and snapshot-error states. On narrow viewports the table scrolls within its wrapper without widening the page. Create, amend, and cancel actions remain unimplemented in their separate stories.
 
 ### 2. Sort, filter, and refresh trades
 
-**Status:** Proposed
+**Status:** Implemented
 
 As a blotter user, I want to sort, filter, and refresh the collection so I can find trades and request the latest snapshot on demand.
 
 **Acceptance criteria**
 
 - Users can sort the table by supported columns with a visible sort direction.
-- Users can apply and clear basic filters. Candidate fields are symbol, trader, and status; confirm the exact filter set before implementation.
+- Users can apply and clear basic filters for symbol, trader, and status.
 - A refresh action refetches the collection through TanStack Query and presents pending/error feedback without losing the last successful snapshot.
 - Sorting and filtering are client-side for the assessment-sized collection; they do not change the server contract or add pagination.
 - Sorting/filtering controls work by keyboard and expose their state accessibly.
+
+**Implementation:** TanStack Table sorts supported columns and filters client-side by symbol, trader, and status. The clear action resets all filters. A refresh button refetches through TanStack Query, displays pending/error feedback, remains available during SSE reconnects after the first snapshot, and retains the last successful data if refresh fails.
 
 ### 3. Create a trade
 

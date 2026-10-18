@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import TradeBlotterTable from './features/trades/trade-blotter-table';
 
@@ -65,5 +65,80 @@ describe('TradeBlotterTable', () => {
     render(<TradeBlotterTable trades={[]} isLoading={false} emptyMessage="No trades yet" />);
 
     expect(screen.getByRole('status')).toHaveTextContent('No trades yet');
+  });
+
+  it('sorts trades by symbol and exposes the current sort direction', () => {
+    render(
+      <TradeBlotterTable
+        trades={[{ ...sampleTrade, id: 'trade-msft', symbol: 'MSFT' }, sampleTrade]}
+        isLoading={false}
+        emptyMessage="No trades"
+      />,
+    );
+
+    const table = screen.getByRole('table', { name: 'Trade blotter' });
+    const symbolHeader = screen.getByRole('columnheader', { name: /Symbol/ });
+    fireEvent.click(within(symbolHeader).getByRole('button', { name: 'Sort by Symbol' }));
+
+    const rows = within(table).getAllByRole('row').slice(1);
+    expect(within(rows[0]).getByRole('cell', { name: 'AAPL' })).toBeInTheDocument();
+    expect(symbolHeader).toHaveAttribute('aria-sort', 'ascending');
+  });
+
+  it('filters by symbol, trader, and status and clears filters', () => {
+    const secondTrade = {
+      ...sampleTrade,
+      id: 'TRD-100002',
+      symbol: 'MSFT',
+      trader: 'ABROWN',
+      status: 'CANCELLED' as const,
+    };
+    render(
+      <TradeBlotterTable
+        trades={[sampleTrade, secondTrade]}
+        isLoading={false}
+        emptyMessage="No trades"
+      />,
+    );
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter by symbol' }), {
+      target: { value: 'AAPL' },
+    });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter by trader' }), {
+      target: { value: 'JSMITH' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filter by status' }), {
+      target: { value: 'ACTIVE' },
+    });
+
+    expect(screen.getByRole('row', { name: /TRD-100001/ })).toBeInTheDocument();
+    expect(screen.queryByRole('row', { name: /TRD-100002/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+
+    expect(screen.getByRole('row', { name: /TRD-100001/ })).toBeInTheDocument();
+    expect(screen.getByRole('row', { name: /TRD-100002/ })).toBeInTheDocument();
+  });
+
+  it('filters rows by trader without relying on another active filter', () => {
+    const secondTrade = {
+      ...sampleTrade,
+      id: 'TRD-100002',
+      trader: 'ABROWN',
+    };
+    render(
+      <TradeBlotterTable
+        trades={[sampleTrade, secondTrade]}
+        isLoading={false}
+        emptyMessage="No trades"
+      />,
+    );
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter by trader' }), {
+      target: { value: 'JSMITH' },
+    });
+
+    expect(screen.getByRole('row', { name: /TRD-100001/ })).toBeInTheDocument();
+    expect(screen.queryByRole('row', { name: /TRD-100002/ })).not.toBeInTheDocument();
   });
 });
