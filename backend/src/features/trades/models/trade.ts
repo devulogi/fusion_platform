@@ -15,4 +15,4 @@ export interface Trade {
   readonly counterparty?: string;
 }
 
-export type { AmendTradeInput, CreateTradeInput } from '../trade-input.ts';
+export type { AmendTradeInput, CreateTradeInput, ReactivateTradeInput } from '../trade-input.ts';

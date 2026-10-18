@@ -23,7 +23,7 @@ Compose loads backend connection settings from `backend/.env.dev` and frontend s
 
 ### Backend Decision Analysis and Resolution
 
-**Status:** Partially implemented. The PostgreSQL trade schema, setup-time seeding, collection read/create/amend/cancel workflows, in-memory cache, and `trade.created`/`trade.amended`/`trade.cancelled` SSE delivery are implemented. Robust SSE reconnect/snapshot recovery remains proposed.
+**Status:** Partially implemented. The PostgreSQL trade schema, setup-time seeding, readiness checks, collection read/create/amend/cancel/reactivate workflows, in-memory cache, all four trade SSE events, and frontend reconnect/snapshot recovery are implemented. Durable replay and multi-instance fan-out remain proposed.
 
 **Scope:** A single backend service for reading, creating, amending, and cancelling the assessment's approximately 100–1,000 trades. The API returns the complete collection; TanStack Table handles sorting and filtering in the browser. Pagination and multi-instance deployment are not assumed requirements.
 
@@ -37,19 +37,19 @@ Compose loads backend connection settings from `backend/.env.dev` and frontend s
 - Trade services own use-case coordination and business rules for creating, amending, and cancelling trades.
 - The repository owns PostgreSQL queries and transactions. PostgreSQL remains the system of record.
 - `TradeCache` owns an in-process `Map<TradeId, Trade>` used to serve the full collection after initial hydration.
-- A typed event publisher emits `trade.created`, `trade.amended`, and `trade.cancelled` after persistence and cache update. The SSE endpoint broadcasts committed trade changes to connected clients.
+- A typed event publisher emits `trade.created`, `trade.amended`, `trade.cancelled`, and `trade.reactivated` after persistence and cache update. The SSE endpoint broadcasts committed trade changes to connected clients.
 
-**Startup and read flow:** `setup.sh` applies SQL migrations and optionally seeds an empty database before starting the backend. The backend connects to PostgreSQL and loads persisted trades into the Map. `GET /api/v1/trades` returns `{ items }` for the complete collection, without redundant counts or pagination metadata; it does not perform a database load on each request. If startup hydration fails, the service must not report ready or serve an empty cache as complete. The client sorts and filters locally; the API does not page the collection server-side.
+**Startup and read flow:** `setup.sh` applies SQL migrations and optionally seeds an empty database before starting the backend. The backend connects to PostgreSQL and loads persisted trades into the Map before listening. `GET /ready` reports HTTP `200` only while PostgreSQL responds and cache hydration is complete; otherwise it returns `503`. Compose uses readiness before starting dependent services. `GET /api/v1/trades` returns `{ items }` for the complete collection, without redundant counts or pagination metadata; it does not perform a database load on each request. If startup hydration fails, the service does not begin serving. The client sorts and filters locally; the API does not page the collection server-side.
 
-**HTTP contracts and traceability:** JSON REST errors use `{ error: { code, reason, requestId } }`, with `details: [{ field, reason }]` for invalid fields. A server-generated `X-Request-Id` accompanies both successful and failed responses and correlates with structured request/error logs. Request logs record normalized routes rather than raw URLs or query values. API changes are reflected in the OpenAPI document served at `/api-docs/openapi.yaml` and Swagger UI at `/api-docs/`. The frontend is currently a starter screen and does not yet consume these contracts.
+**HTTP contracts and traceability:** JSON REST errors use `{ error: { code, reason, requestId } }`, with `details: [{ field, reason }]` for invalid fields. A server-generated `X-Request-Id` accompanies both successful and failed responses and correlates with structured request/error logs. Request logs record normalized routes rather than raw URLs or query values. API changes are reflected in the OpenAPI document served at `/api-docs/openapi.yaml` and Swagger UI at `/api-docs/`. The frontend consumes the trade collection and event stream.
 
-**Exploring the API:** Open <http://localhost:4001/api-docs> on the configured backend port. Swagger UI uses that same origin for "Try it out"; no additional service or port is needed. Active trades can be amended with editable fields or cancelled with `PATCH /api/v1/trades/{tradeId}` and `{ "status": "CANCELLED" }`. The SSE operation documents `trade.created`, `trade.amended`, and `trade.cancelled`, their JSON payloads, wire format, reconnect delay, and recovery limitations. Swagger UI is not a live event viewer: use `curl -N http://localhost:4001/api/v1/events` or a browser `EventSource`. Events have no IDs or durable replay; clients must reload the collection after reconnect and reconcile events received during a snapshot fetch. That client recovery flow remains unimplemented.
+**Exploring the API:** Open <http://localhost:4001/api-docs> on the configured backend port. Swagger UI uses that same origin for "Try it out"; no additional service or port is needed. Active trades can be amended with editable fields, cancelled with `{ "status": "CANCELLED" }`, or reactivated with `{ "status": "ACTIVE" }` through `PATCH /api/v1/trades/{tradeId}`. The SSE operation documents `trade.created`, `trade.amended`, `trade.cancelled`, and `trade.reactivated`, their JSON payloads, wire format, reconnect delay, and recovery limitations. Swagger UI is not a live event viewer: use `curl -N http://localhost:4001/api/v1/events` or a browser `EventSource`. Events have no IDs or durable replay; the frontend reloads the collection on reconnect and reconciles events buffered during snapshot fetches.
 
 **Mutation flow:** The controller validates the request; the service applies domain rules; the repository commits to PostgreSQL and returns the saved trade; the service then updates the Map synchronously and publishes the corresponding event. A persistence failure must leave the cache unchanged and publish no event. SSE delivery failures must not turn an already-committed HTTP mutation into a failure.
 
 **Cache trade-off:** A Map provides average O(1) lookup by trade ID, but producing the full collection remains O(n), and serialization and network payload costs remain proportional to the result. For up to 1,000 trades this is a deliberate, bounded single-process design, not a claim of sub-millisecond end-to-end reads. PostgreSQL remains authoritative; the cache is disposable and rehydrates from PostgreSQL on every startup. It is not shared across multiple backend instances.
 
-**Real-time transport:** Use Server-Sent Events because clients send commands through REST and only need server-to-client updates. SSE is receive-only by design; the assessment does not require client events over the real-time channel. WebSockets would be reconsidered if bidirectional streaming becomes a real requirement. The backend publishes `trade.created`, `trade.amended`, and `trade.cancelled` to connected clients. Events are process-local and not durable; reconnect recovery and snapshot reconciliation remain future work.
+**Real-time transport:** Use Server-Sent Events because clients send commands through REST and only need server-to-client updates. SSE is receive-only by design; the assessment does not require client events over the real-time channel. WebSockets would be reconsidered if bidirectional streaming becomes a real requirement. The backend publishes `trade.created`, `trade.amended`, `trade.cancelled`, and `trade.reactivated` to connected clients. The frontend waits for the stream to open before loading its snapshot, buffers events during a fetch, and reloads the collection after automatic EventSource reconnection. Events remain process-local and non-durable.
 
 **Concurrency and alternatives:** Amendments use an atomic active-status condition in PostgreSQL, but do not use version-based optimistic concurrency; concurrent amendments to an active trade may overwrite one another. Redis, distributed caching, and multiple services are deferred because the assessment specifies neither multi-instance scale nor a cache bottleneck. This is a single-process architecture with explicit limits, not a horizontally scaled design.
 
@@ -58,7 +58,7 @@ The proposed backend workflows and acceptance criteria are documented in [backen
 ### Frontend
 
 - Vite serves the app directly in development to provide hot module replacement; the production Dockerfile uses Nginx to serve the built static assets.
-- React and TypeScript are the required UI foundation. Table and form dependencies are available for the planned blotter workflow but are not yet used by the starter screen.
+- React and TypeScript power the live trade blotter; TanStack Table and form dependencies remain available for future sorting, filtering, and trade-entry workflows.
 
 ## Prerequisites
 
@@ -86,7 +86,8 @@ Running `docker compose up` by itself does not run migrations or seed data, and 
 In development, `SEED_TRADES=true` seeds an empty table with 500 trades; set `SEED_TRADES=false` to disable it. `SEED_TRADES_COUNT` can be set from 100 to 1,000. The SQL migration ledger makes setup repeatable, and the seed script skips a non-empty table.
 
 - Frontend: <http://localhost:3001>
-- Backend health check: <http://localhost:4001/health>
+- Backend liveness: <http://localhost:4001/health>
+- Backend readiness: <http://localhost:4001/ready>
 - PostgreSQL: `localhost:5432`
 
 | Setting        | Value              |
