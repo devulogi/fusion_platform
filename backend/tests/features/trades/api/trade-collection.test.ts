@@ -31,7 +31,6 @@ function createTestApp(
     create: () => Promise.reject(new Error('Unexpected trade creation')),
     amend: () => Promise.reject(new Error('Unexpected trade amendment')),
     cancel: () => Promise.reject(new Error('Unexpected trade cancellation')),
-    reactivate: () => Promise.reject(new Error('Unexpected trade reactivation')),
   },
   tradeEventPublisher = new TradeEventPublisher(),
 ) {
@@ -187,7 +186,6 @@ describe('GET /api/trades', () => {
       create: createTrade,
       amend: () => Promise.reject(new Error('Not used in create test')),
       cancel: () => Promise.reject(new Error('Not used in create test')),
-      reactivate: () => Promise.reject(new Error('Not used in create test')),
     };
 
     const response = await request(createTestApp(tradeCache, tradeRepository, tradeEventPublisher))
@@ -250,7 +248,6 @@ describe('GET /api/trades', () => {
       create: vi.fn<TradeRepositoryContract['create']>().mockResolvedValue(createdTrade),
       amend: () => Promise.reject(new Error('Not used in event failure test')),
       cancel: () => Promise.reject(new Error('Not used in event failure test')),
-      reactivate: () => Promise.reject(new Error('Not used in event failure test')),
     };
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
@@ -289,7 +286,6 @@ describe('GET /api/trades', () => {
       create: createTrade,
       amend: () => Promise.reject(new Error('Not used in validation test')),
       cancel: () => Promise.reject(new Error('Not used in validation test')),
-      reactivate: () => Promise.reject(new Error('Not used in validation test')),
     };
 
     const response = await request(createTestApp(tradeCache, tradeRepository, tradeEventPublisher))
@@ -385,7 +381,6 @@ describe('PATCH /api/v1/trades/:tradeId', () => {
       create: () => Promise.reject(new Error('Not used in amend test')),
       amend: amendTrade,
       cancel: () => Promise.reject(new Error('Not used in amend test')),
-      reactivate: () => Promise.reject(new Error('Not used in amend test')),
     };
 
     const response = await request(createTestApp(tradeCache, tradeRepository, tradeEventPublisher))
@@ -415,7 +410,6 @@ describe('PATCH /api/v1/trades/:tradeId', () => {
       create: () => Promise.reject(new Error('Not used in cancellation test')),
       amend: () => Promise.reject(new Error('Not used in cancellation test')),
       cancel: cancelTrade,
-      reactivate: () => Promise.reject(new Error('Not used in cancellation test')),
     };
 
     const response = await request(createTestApp(tradeCache, tradeRepository, tradeEventPublisher))
@@ -442,43 +436,31 @@ describe('PATCH /api/v1/trades/:tradeId', () => {
     expect(receivedEvents).toEqual([{ type: 'trade.cancelled', trade: cancelledTrade }]);
   });
 
-  it('reactivates a cancelled trade and does not republish an idempotent repeat', async () => {
+  it('rejects direct reactivation of a cancelled trade', async () => {
     const cancelledTrade: Trade = { ...activeTrade, status: 'CANCELLED' };
     const tradeCache = new TradeCache();
     tradeCache.hydrate([cancelledTrade]);
     const tradeEventPublisher = new TradeEventPublisher();
     const receivedEvents: Array<{ type: string; trade: Trade }> = [];
     tradeEventPublisher.subscribe((event) => receivedEvents.push(event));
-    const reactivateTrade = vi
-      .fn<TradeRepositoryContract['reactivate']>()
-      .mockResolvedValueOnce({ trade: activeTrade, changed: true })
-      .mockResolvedValueOnce({ trade: activeTrade, changed: false });
-    const tradeRepository = {
+    const amendTrade = vi.fn<TradeRepositoryContract['amend']>();
+    const cancelTrade = vi.fn<TradeRepositoryContract['cancel']>();
+    const tradeRepository: TradeRepositoryContract = {
       findAll: () => Promise.resolve([]),
-      create: () => Promise.reject(new Error('Not used in reactivation test')),
-      amend: () => Promise.reject(new Error('Not used in reactivation test')),
-      cancel: () => Promise.reject(new Error('Not used in reactivation test')),
-      reactivate: reactivateTrade,
+      create: () => Promise.reject(new Error('Not used in direct reactivation test')),
+      amend: amendTrade,
+      cancel: cancelTrade,
     };
 
-    const firstResponse = await request(
-      createTestApp(tradeCache, tradeRepository, tradeEventPublisher),
-    )
-      .patch(`${ApiPath.trades}/${activeTrade.id}`)
-      .send({ status: 'ACTIVE' });
-    const repeatedResponse = await request(
-      createTestApp(tradeCache, tradeRepository, tradeEventPublisher),
-    )
-      .patch(`${ApiPath.trades}/${activeTrade.id}`)
+    const response = await request(createTestApp(tradeCache, tradeRepository, tradeEventPublisher))
+      .patch(`${ApiPath.trades}/${cancelledTrade.id}`)
       .send({ status: 'ACTIVE' });
 
-    expect(firstResponse.status).toBe(200);
-    expect(firstResponse.body).toMatchObject({ ...activeTrade, book: null, counterparty: null });
-    expect(repeatedResponse.status).toBe(200);
-    expect(reactivateTrade).toHaveBeenCalledTimes(2);
-    expect(reactivateTrade).toHaveBeenCalledWith(activeTrade.id);
-    expect(tradeCache.getAll()).toEqual([activeTrade]);
-    expect(receivedEvents).toEqual([{ type: 'trade.reactivated', trade: activeTrade }]);
+    expect(response.status).toBe(400);
+    expect(amendTrade).not.toHaveBeenCalled();
+    expect(cancelTrade).not.toHaveBeenCalled();
+    expect(tradeCache.getAll()).toEqual([cancelledTrade]);
+    expect(receivedEvents).toEqual([]);
   });
 
   it('returns validation errors without persisting or publishing', async () => {
@@ -493,7 +475,6 @@ describe('PATCH /api/v1/trades/:tradeId', () => {
       create: () => Promise.reject(new Error('Not used in amend test')),
       amend: amendTrade,
       cancel: () => Promise.reject(new Error('Not used in validation test')),
-      reactivate: () => Promise.reject(new Error('Not used in validation test')),
     };
 
     const response = await request(createTestApp(tradeCache, tradeRepository, tradeEventPublisher))
@@ -517,7 +498,6 @@ describe('PATCH /api/v1/trades/:tradeId', () => {
       create: () => Promise.reject(new Error('Not used in cancellation test')),
       amend: () => Promise.reject(new Error('Not used in cancellation test')),
       cancel: cancelTrade,
-      reactivate: () => Promise.reject(new Error('Not used in cancellation test')),
     };
 
     const response = await request(createTestApp(tradeCache, tradeRepository))
@@ -549,7 +529,6 @@ describe('PATCH /api/v1/trades/:tradeId', () => {
       create: () => Promise.reject(new Error('Not used in amend test')),
       amend: amendTrade,
       cancel: () => Promise.reject(new Error('Not used in amend test')),
-      reactivate: () => Promise.reject(new Error('Not used in amend test')),
     };
 
     const response = await request(createTestApp(tradeCache, tradeRepository))

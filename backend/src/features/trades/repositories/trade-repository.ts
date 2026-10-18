@@ -95,31 +95,6 @@ export class TradeRepository implements TradeRepositoryContract {
     }
   }
 
-  async reactivate(id: string): Promise<TradeMutationResult> {
-    try {
-      const persistedTrade = await this.database.trade.update({
-        where: { id, status: TRADE_STATUS.CANCELLED },
-        data: { status: TRADE_STATUS.ACTIVE },
-      });
-
-      return { trade: this.toDomainTrade(persistedTrade), changed: true };
-    } catch (error: unknown) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2025') {
-        throw error;
-      }
-
-      const existingTrade = await this.database.trade.findUnique({ where: { id } });
-      if (existingTrade === null) {
-        throw new TradeNotFoundError(id, { cause: error });
-      }
-      if (existingTrade.status === TRADE_STATUS.ACTIVE) {
-        return { trade: this.toDomainTrade(existingTrade), changed: false };
-      }
-
-      throw error;
-    }
-  }
-
   private toDomainTrade(trade: PersistedTrade): Trade {
     return {
       id: trade.id,

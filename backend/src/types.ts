@@ -7,7 +7,6 @@ import type {
   createTradeInputSchema,
   healthResponseSchema,
   readinessResponseSchema,
-  reactivateTradeInputSchema,
   tradeCollectionResponseSchema,
   tradeIdSchema,
   tradeNotFoundResourceSchema,
@@ -41,7 +40,6 @@ export type TradeEventName = (typeof TradeEventType)[keyof typeof TradeEventType
 export type CreateTradeInput = z.infer<typeof createTradeInputSchema>;
 export type AmendTradeInput = z.infer<typeof amendTradeInputSchema>;
 export type CancelTradeInput = z.infer<typeof cancelTradeInputSchema>;
-export type ReactivateTradeInput = z.infer<typeof reactivateTradeInputSchema>;
 export type TradeResponse = z.infer<typeof tradeResponseSchema>;
 export type TradeCollectionResponse = z.infer<typeof tradeCollectionResponseSchema>;
 export type TradeNotFound = z.infer<typeof tradeNotFoundResourceSchema>;
@@ -79,7 +77,6 @@ export type TradeRepositoryContract = {
   create(input: CreateTradeInput): Promise<Trade>;
   amend(id: string, input: AmendTradeInput): Promise<Trade>;
   cancel(id: string): Promise<TradeMutationResult>;
-  reactivate(id: string): Promise<TradeMutationResult>;
 };
 
 export type PersistedTrade = {
