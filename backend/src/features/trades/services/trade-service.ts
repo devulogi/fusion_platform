@@ -7,6 +7,7 @@ import {
   parseAmendTradeInput,
   parseCancelTradeInput,
   parseCreateTradeInput,
+  parseReactivateTradeInput,
   parseTradeId,
 } from '../trade-input.ts';
 
@@ -16,7 +17,10 @@ export class TradeService {
     private readonly tradeRepository: TradeRepositoryContract,
     private readonly tradeEventPublisher: Pick<
       TradeEventPublisher,
-      'publishTradeCreated' | 'publishTradeAmended' | 'publishTradeCancelled'
+      | 'publishTradeCreated'
+      | 'publishTradeAmended'
+      | 'publishTradeCancelled'
+      | 'publishTradeReactivated'
     >,
   ) {}
 
@@ -61,6 +65,18 @@ export class TradeService {
     this.tradeCache.replace(result.trade);
     if (result.changed) {
       this.tradeEventPublisher.publishTradeCancelled(result.trade);
+    }
+    return result.trade;
+  }
+
+  async reactivateTrade(id: unknown, input: unknown): Promise<Trade> {
+    const validatedId = parseTradeId(id);
+    parseReactivateTradeInput(input);
+    this.tradeCache.assertHydrated();
+    const result = await this.tradeRepository.reactivate(validatedId);
+    this.tradeCache.replace(result.trade);
+    if (result.changed) {
+      this.tradeEventPublisher.publishTradeReactivated(result.trade);
     }
     return result.trade;
   }

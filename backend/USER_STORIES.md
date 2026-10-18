@@ -1,6 +1,6 @@
 # Backend User Stories
 
-**Status:** Stories 1, 2, 4, 5, 6, and 8 are implemented. Story 7 is partially implemented; Stories 3 and 9 remain proposed.
+**Status:** Stories 1, 2, 3, 4, 5, 6, 7, and 8 are implemented. Story 9 remains proposed.
 
 These stories translate the take-home requirements into backend behavior. Implemented stories describe current behavior; paths and business rules in proposed stories are not claims about available API behavior.
 
@@ -11,6 +11,7 @@ These stories translate the take-home requirements into backend behavior. Implem
 - Clients send create, amend, and cancel commands through REST. Server-to-client changes are delivered over SSE.
 - The persisted trade contract uses the assessment's required fields: ID, symbol, side, quantity, price, trader, trade date, and status. Book and counterparty are optional sample-data fields.
 - Confirmed for Story 5: cancelled trades cannot be amended. Amendments do not use version-based optimistic concurrency.
+- Confirmed for Story 5: reactivation uses `PATCH /api/v1/trades/:tradeId` with `{ "status": "ACTIVE" }`; repeating reactivation is idempotent and does not publish a duplicate event.
 - Confirmed for Story 6: repeated cancellation is idempotent, returns HTTP `200`, and does not publish a duplicate event.
 
 ## Stories
@@ -47,14 +48,18 @@ As a blotter user, I want to retrieve the current trades so the frontend can dis
 
 ### 3. Check backend readiness
 
+**Status:** Implemented
+
 As a developer, I want to know whether the backend and its database dependency are ready before relying on the service.
 
 **Acceptance criteria**
 
+- `GET /health` is a liveness check; `GET /ready` reports readiness for dependent services.
 - Liveness indicates whether the API process is running.
 - Readiness reports unavailable until PostgreSQL is reachable and initial cache hydration is complete.
 - Compose health checks use readiness so dependent services do not start against an uninitialized backend.
-- The current `/health` endpoint is a basic process check; a readiness check is a planned Phase 3 change.
+
+**Implementation:** `/health` continues to return HTTP `200` while the API process is serving. `/ready` returns HTTP `200` only when PostgreSQL responds to a probe and the initial trade cache has been hydrated; otherwise it returns HTTP `503` with a request-ID error envelope. Backend startup hydrates the cache before listening, and Compose uses `/ready` as the backend healthcheck before starting the frontend.
 
 ### 4. Create a trade
 
@@ -73,22 +78,25 @@ As a trader, I want to create a trade so it is persisted and visible to all conn
 
 **Implementation:** The POST route and service validate input using the same Zod schema, including when the service is called outside HTTP. The repository persists through Prisma and returns the canonical saved trade; the service updates the cache, then publishes `trade.created`; the controller returns the serialized trade with HTTP `201`. Omitted optional `book` and `counterparty` fields are represented as `null` in the response. JSON errors contain `{ error: { code, reason, requestId } }`, with `details: [{ field, reason }]` for validation failures. Responses include a server-generated `X-Request-Id`, correlated with request/error logs.
 
-### 5. Amend a trade
+### 5. Amend or reactivate a trade
 
 **Status:** Implemented
 
-As a trader, I want to amend an existing trade so corrections are reflected in the blotter and visible to other users.
+As a trader, I want to amend an active trade or reactivate one cancelled by mistake so the corrected state is reflected in the blotter and visible to other users.
 
 **Acceptance criteria**
 
 - `PATCH /api/v1/trades/:tradeId` validates the permitted amendment fields.
 - A valid amendment is persisted first, then the saved trade replaces the cached entry, then `trade.amended` is emitted.
+- `PATCH /api/v1/trades/:tradeId` accepts the reactivation command `{ "status": "ACTIVE" }`, distinct from amendment and cancellation request bodies.
+- Reactivation changes a cancelled trade to `ACTIVE` without changing its other fields, then updates the cache and emits `trade.reactivated` using the canonical saved trade.
+- Reactivating an already-active trade returns HTTP `200` with the canonical trade and does not publish a duplicate event.
 - The response contains the persisted trade.
 - An unknown trade returns HTTP `404`; invalid fields return HTTP `400`.
-- A cancelled trade cannot be amended and returns HTTP `409 Conflict`.
+- A cancelled trade cannot be amended; it must be reactivated explicitly before amendment.
 - Amendment accepts all editable trade fields except `id` and `status`; no version field or optimistic concurrency check is used.
 
-**Implementation:** `PATCH /api/v1/trades/:tradeId` validates the path ID and strict partial request body, then conditionally updates only an active trade in PostgreSQL. The service replaces the cache entry with the canonical saved trade before publishing `trade.amended`. Success returns the saved trade with HTTP `200`; unknown IDs return `404`, invalid requests return `400`, and cancelled trades return `409`. A persistence failure leaves cache and events unchanged.
+**Implementation:** Ordinary amendments use strict partial updates of active trades. Reactivation accepts the strict `{ "status": "ACTIVE" }` command and conditionally changes a cancelled trade to active without changing its other fields. The repository returns the canonical record; the service updates the cache and publishes `trade.reactivated` only when state changes. Repeating the command returns HTTP `200` without a duplicate event. Unknown IDs return `404`; invalid commands return `400`; persistence failures leave the cache and event stream unchanged.
 
 ### 6. Cancel a trade
 
@@ -109,21 +117,21 @@ As a trader, I want to cancel an active trade without deleting its record, so th
 
 ### 7. Receive live trade updates
 
-**Status:** Partially implemented
+**Status:** Implemented
 
 As a connected blotter user, I want other users' committed trade changes pushed to my browser without refreshing the page.
 
 **Acceptance criteria**
 
 - `GET /api/v1/events` opens an SSE stream with the correct `text/event-stream` content type.
-- The server sends named `trade.created`, `trade.amended`, and `trade.cancelled` events containing the canonical saved trade.
+- The server sends named `trade.created`, `trade.amended`, `trade.cancelled`, and `trade.reactivated` events containing the canonical saved trade.
 - The event publisher runs only after a successful database mutation and cache update.
 - A disconnected client is removed from active subscribers and can reconnect.
 - Events are process-local and not durable. After reconnect, the client reloads `GET /api/v1/trades` to reconcile missed events.
 - The client opens the event stream before fetching its initial snapshot and reconciles events received during that fetch, avoiding a snapshot/subscribe gap.
 - SSE delivery errors do not roll back committed data or change the successful REST response.
 
-**Implementation to date:** `GET /api/v1/events` streams `trade.created`, `trade.amended`, and `trade.cancelled`. Reconnect recovery and snapshot reconciliation remain proposed.
+**Implementation:** `GET /api/v1/events` streams canonical `trade.created`, `trade.amended`, `trade.cancelled`, and `trade.reactivated` events. Each browser connection owns one EventSource and is removed from the publisher when the response closes. The frontend waits for the stream to open before fetching `GET /api/v1/trades`, buffers events while each snapshot is in flight, and applies those events over the returned collection. EventSource reconnects automatically; every reconnection triggers a fresh collection fetch to recover changes missed while disconnected. Event delivery failures are isolated from successful REST mutations. Event IDs, durable replay, and multi-instance fan-out are not implemented.
 
 ### 8. Explore the API contract
 

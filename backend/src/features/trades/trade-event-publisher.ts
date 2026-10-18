@@ -4,6 +4,7 @@ export const TradeEventType = {
   CREATED: 'trade.created',
   AMENDED: 'trade.amended',
   CANCELLED: 'trade.cancelled',
+  REACTIVATED: 'trade.reactivated',
 } as const;
 
 export interface TradeChangedEvent {
@@ -31,6 +32,10 @@ export class TradeEventPublisher {
 
   publishTradeCancelled(trade: Trade): void {
     this.publish(TradeEventType.CANCELLED, trade);
+  }
+
+  publishTradeReactivated(trade: Trade): void {
+    this.publish(TradeEventType.REACTIVATED, trade);
   }
 
   private publish(type: TradeChangedEvent['type'], trade: Trade): void {

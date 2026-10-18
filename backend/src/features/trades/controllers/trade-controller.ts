@@ -7,6 +7,8 @@ import {
   parseAmendTradeInput,
   parseCancelTradeInput,
   parseCreateTradeInput,
+  parseReactivateTradeInput,
+  reactivateTradeInputSchema,
   parseTradeId,
 } from '../trade-input.ts';
 
@@ -42,9 +44,15 @@ export class TradeController {
     try {
       const tradeId = parseTradeId(request.params.tradeId);
       const cancellation = cancelTradeInputSchema.safeParse(request.body);
+      const reactivation = reactivateTradeInputSchema.safeParse(request.body);
       const trade = cancellation.success
         ? await this.tradeService.cancelTrade(tradeId, parseCancelTradeInput(request.body))
-        : await this.tradeService.amendTrade(tradeId, parseAmendTradeInput(request.body));
+        : reactivation.success
+          ? await this.tradeService.reactivateTrade(
+              tradeId,
+              parseReactivateTradeInput(request.body),
+            )
+          : await this.tradeService.amendTrade(tradeId, parseAmendTradeInput(request.body));
       response.status(HttpStatus.OK).json(serializeTrade(trade));
     } catch (error: unknown) {
       next(error);

@@ -27,9 +27,15 @@ export const cancelTradeInputSchema = z
   .strict()
   .openapi('CancelTradeRequest');
 
+export const reactivateTradeInputSchema = z
+  .object({ status: z.literal('ACTIVE') })
+  .strict()
+  .openapi('ReactivateTradeRequest');
+
 export type CreateTradeInput = z.infer<typeof createTradeInputSchema>;
 export type AmendTradeInput = z.infer<typeof amendTradeInputSchema>;
 export type CancelTradeInput = z.infer<typeof cancelTradeInputSchema>;
+export type ReactivateTradeInput = z.infer<typeof reactivateTradeInputSchema>;
 
 export class TradeInputValidationError extends Error {
   constructor(readonly cause: ZodError) {
@@ -56,6 +62,14 @@ export function parseAmendTradeInput(input: unknown): AmendTradeInput {
 
 export function parseCancelTradeInput(input: unknown): CancelTradeInput {
   const result = cancelTradeInputSchema.safeParse(input);
+  if (!result.success) {
+    throw new TradeInputValidationError(result.error);
+  }
+  return result.data;
+}
+
+export function parseReactivateTradeInput(input: unknown): ReactivateTradeInput {
+  const result = reactivateTradeInputSchema.safeParse(input);
   if (!result.success) {
     throw new TradeInputValidationError(result.error);
   }

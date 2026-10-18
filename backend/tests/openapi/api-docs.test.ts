@@ -69,7 +69,7 @@ describe('API documentation', () => {
         },
         [`${ApiPath.trades}/{tradeId}`]: {
           get: { operationId: 'getTradeById' },
-          patch: { operationId: 'amendOrCancelTrade' },
+          patch: { operationId: 'amendCancelOrReactivateTrade' },
         },
         [ApiPath.health]: { get: { operationId: 'checkLiveness' } },
         [ApiPath.readiness]: { get: { operationId: 'checkReadiness' } },
@@ -83,6 +83,7 @@ describe('API documentation', () => {
     expect(description).toContain('trade.created');
     expect(description).toContain('trade.amended');
     expect(description).toContain('trade.cancelled');
+    expect(description).toContain('trade.reactivated');
     expect(description).toContain('Last-Event-ID');
     expect(description).toContain('buffers events during each fetch');
     expect(description).toContain('after each reconnection');
@@ -137,6 +138,31 @@ describe('API documentation', () => {
       })
       .parse(openApiDocument.components.schemas.CancelTradeRequest);
     expect(cancelRequestSchema.properties.status.enum).toContain('CANCELLED');
+    const reactivateRequestSchema = z
+      .object({
+        properties: z.object({
+          status: z.object({ enum: z.array(z.string()) }),
+        }),
+      })
+      .parse(openApiDocument.components.schemas.ReactivateTradeRequest);
+    expect(reactivateRequestSchema.properties.status.enum).toContain('ACTIVE');
+    const reactivatedExample = z
+      .string()
+      .parse(
+        document.getIn([
+          'paths',
+          ApiPath.tradeEvents,
+          'get',
+          'responses',
+          '200',
+          'content',
+          'text/event-stream',
+          'examples',
+          'reactivated',
+          'value',
+        ]),
+      );
+    expect(reactivatedExample).toMatch(/^retry: 3000\n\nevent: trade.reactivated\ndata: /);
   });
 
   it('serves Swagger UI from the backend', async () => {

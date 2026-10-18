@@ -29,7 +29,17 @@ function setup() {
   const app = createApp({
     healthController: new HealthController(),
     tradeController: new TradeController(
-      new TradeService(cache, { findAll: () => Promise.resolve([]), create }, events),
+      new TradeService(
+        cache,
+        {
+          findAll: () => Promise.resolve([]),
+          create,
+          amend: () => Promise.reject(new Error('Not used in request error tests')),
+          cancel: () => Promise.reject(new Error('Not used in request error tests')),
+          reactivate: () => Promise.reject(new Error('Not used in request error tests')),
+        },
+        events,
+      ),
     ),
     tradeEventsController: new TradeEventsController(events),
     logger: { info, error },
