@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { RefreshCw } from 'lucide-react';
 import { useConnectionStatus } from './contexts/connection-status-context';
 import TradeBlotterTable from './features/trades/trade-blotter-table';
 import {
@@ -34,9 +35,10 @@ function upsertTrade(trades: Trade[], updatedTrade: Trade): Trade[] {
 function App() {
   const queryClient = useQueryClient();
   const {
-    data: trades = [],
-    isError: snapshotUnavailable,
+    data: cachedTrades,
+    isError,
     isFetched,
+    isFetching,
     refetch: refetchTrades,
   } = useQuery({
     queryKey: tradeQueryKey,
@@ -44,7 +46,11 @@ function App() {
     enabled: false,
     retry: false,
   });
+  const trades = cachedTrades ?? [];
+  const snapshotUnavailable = isError && cachedTrades === undefined;
   const { connectionStatus, setConnectionStatus } = useConnectionStatus();
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const refreshSnapshotRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -76,10 +82,12 @@ function App() {
               tradeQueryKey,
               eventsDuringSnapshot.reduce(upsertTrade, result.data),
             );
+            setRefreshFailed(false);
             hasLoadedSnapshot = true;
           }
         } catch {
           if (isMounted) {
+            if (hasLoadedSnapshot) setRefreshFailed(true);
             if (hasLoadedSnapshot && bufferedEvents.length > 0) {
               const eventsToApply = bufferedEvents;
               bufferedEvents = [];
@@ -92,6 +100,7 @@ function App() {
       } while (refreshQueued && isMounted);
       snapshotLoading = false;
     };
+    refreshSnapshotRef.current = refreshSnapshot;
 
     const handleTradeEvent = (event: Event): void => {
       if (!(event instanceof MessageEvent) || typeof event.data !== 'string') return;
@@ -131,6 +140,7 @@ function App() {
 
     return () => {
       isMounted = false;
+      refreshSnapshotRef.current = null;
       eventSource.close();
     };
   }, [queryClient, refetchTrades, setConnectionStatus]);
@@ -161,14 +171,38 @@ function App() {
             <p className="text-xs font-semibold uppercase text-[#8a5b35]">Markets / Operations</p>
             <h1 className="mt-2 text-3xl font-semibold">Trades</h1>
           </div>
-          <p className="text-sm text-[#58665e]">
-            {trades.length.toLocaleString()} {trades.length === 1 ? 'trade' : 'trades'}
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-[#58665e]">
+              {trades.length.toLocaleString()} {trades.length === 1 ? 'trade' : 'trades'}
+            </p>
+            <button
+              aria-label="Refresh trades"
+              aria-busy={isFetching}
+              className="inline-flex min-h-11 items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-all duration-150 ease-out hover:scale-[1.01] hover:bg-blue-500 active:scale-[0.98] active:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              disabled={!isFetched || isFetching}
+              onClick={() => {
+                void refreshSnapshotRef.current?.();
+              }}
+              type="button"
+            >
+              <RefreshCw
+                aria-hidden="true"
+                className={isFetching ? 'animate-spin' : ''}
+                size={16}
+              />
+              {isFetching ? 'Refreshing' : 'Refresh'}
+            </button>
+          </div>
         </div>
 
         {snapshotUnavailable && (
           <p className="mb-4 text-sm text-[#9b4d32]" role="alert">
             Trade snapshot unavailable. It will be retried when the stream reconnects.
+          </p>
+        )}
+        {refreshFailed && (
+          <p className="mb-4 text-sm text-[#9b4d32]" role="alert">
+            Refresh failed. Showing the last successful snapshot.
           </p>
         )}
 
