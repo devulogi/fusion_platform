@@ -1,14 +1,13 @@
 import type { RequestHandler } from 'express';
 import { TradeService } from '../services/trade-service.ts';
-import { serializeTrade, serializeTradeCollection } from '../serializers/trade-serializer.ts';
-import { HttpStatus } from '../../../http/constants.ts';
+import { serializeTrade, serializeTradeCollection } from '../trade-serializer.ts';
+import { HttpStatus } from '../../../constants.ts';
+import { cancelTradeInputSchema, reactivateTradeInputSchema } from '../../../schemas.ts';
 import {
-  cancelTradeInputSchema,
   parseAmendTradeInput,
   parseCancelTradeInput,
   parseCreateTradeInput,
   parseReactivateTradeInput,
-  reactivateTradeInputSchema,
   parseTradeId,
 } from '../trade-input.ts';
 

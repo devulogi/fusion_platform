@@ -1,14 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { TradeRepository } from '../../../../src/features/trades/repositories/trade-repository.ts';
-import {
-  TradeNotAmendableError,
-  TradeNotFoundError,
-} from '../../../../src/features/trades/trade-errors.ts';
-import type {
-  PersistedTrade,
-  TradeWriteDatabase,
-} from '../../../../src/features/trades/repositories/trade-repository.ts';
+import { TradeNotAmendableError, TradeNotFoundError } from '../../../../src/errors.ts';
+import type { PersistedTrade, TradeWriteDatabase } from '../../../../src/types.ts';
 
 const persistedTrade: PersistedTrade = {
   id: 'trade-1',

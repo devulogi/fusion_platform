@@ -1,18 +1,5 @@
-import type { Trade } from './models/trade.ts';
-
-export const TradeEventType = {
-  CREATED: 'trade.created',
-  AMENDED: 'trade.amended',
-  CANCELLED: 'trade.cancelled',
-  REACTIVATED: 'trade.reactivated',
-} as const;
-
-export interface TradeChangedEvent {
-  readonly type: (typeof TradeEventType)[keyof typeof TradeEventType];
-  readonly trade: Trade;
-}
-
-export type TradeEventListener = (event: TradeChangedEvent) => void;
+import { TradeEventType } from '../../constants.ts';
+import type { Trade, TradeChangedEvent, TradeEventListener } from '../../types.ts';
 
 export class TradeEventPublisher {
   private readonly listeners = new Set<TradeEventListener>();

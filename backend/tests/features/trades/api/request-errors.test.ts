@@ -1,21 +1,72 @@
+import { Writable } from 'node:stream';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
+import pino from 'pino';
 import { z } from 'zod';
 import { createApp } from '../../../../src/app.ts';
 import {
   internalServerErrorSchema,
   routeNotFoundSchema,
   validationErrorSchema,
-} from '../../../../src/http/api-errors.ts';
-import { ApiPath } from '../../../../src/http/constants.ts';
-import type { RequestLogger } from '../../../../src/http/request-context.ts';
+} from '../../../../src/schemas.ts';
+import { ApiPath } from '../../../../src/constants.ts';
 import { HealthController } from '../../../../src/features/health/controllers/health-controller.ts';
 import { TradeController } from '../../../../src/features/trades/controllers/trade-controller.ts';
 import { TradeEventsController } from '../../../../src/features/trades/controllers/trade-events-controller.ts';
-import type { TradeRepositoryContract } from '../../../../src/features/trades/repositories/trade-repository.ts';
+import type { TradeRepositoryContract } from '../../../../src/types.ts';
 import { TradeService } from '../../../../src/features/trades/services/trade-service.ts';
 import { TradeCache } from '../../../../src/features/trades/trade-cache.ts';
 import { TradeEventPublisher } from '../../../../src/features/trades/trade-event-publisher.ts';
+
+const requestLogSchema = z
+  .object({
+    requestId: z.string().uuid(),
+    method: z.string(),
+    route: z.string(),
+    status: z.number(),
+    durationMs: z.number().nonnegative(),
+  })
+  .passthrough();
+
+const errorLogSchema = z
+  .object({
+    level: z.number(),
+    requestId: z.string().uuid(),
+    err: z.object({ message: z.string() }).passthrough(),
+  })
+  .passthrough();
+
+function createLogCapture() {
+  const records: unknown[] = [];
+  const stream = new Writable({
+    write(chunk: Buffer, _encoding: BufferEncoding, callback: (error?: Error | null) => void) {
+      records.push(z.unknown().parse(JSON.parse(chunk.toString())));
+      callback();
+    },
+  });
+
+  return { logger: pino({ level: 'info' }, stream), records };
+}
+
+function getRequestLogs(records: readonly unknown[]) {
+  return records.flatMap((record) => {
+    const parsed = requestLogSchema.safeParse(record);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+function getErrorLogs(records: readonly unknown[]) {
+  return records.flatMap((record) => {
+    const parsed = errorLogSchema.safeParse(record);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+function getRequestLogAt(records: readonly unknown[], index = 0) {
+  const log = getRequestLogs(records)[index];
+  if (!log) throw new Error(`Missing request log at index ${index}`);
+  return log;
+}
 
 function setup() {
   const cache = new TradeCache();
@@ -24,8 +75,7 @@ function setup() {
   const events = new TradeEventPublisher();
   const listener = vi.fn<Parameters<TradeEventPublisher['subscribe']>[0]>();
   events.subscribe(listener);
-  const info = vi.fn<RequestLogger['info']>();
-  const error = vi.fn<RequestLogger['error']>();
+  const { logger, records } = createLogCapture();
   const app = createApp({
     healthController: new HealthController(),
     tradeController: new TradeController(
@@ -42,44 +92,56 @@ function setup() {
       ),
     ),
     tradeEventsController: new TradeEventsController(events),
-    logger: { info, error },
+    logger,
   });
-  return { app, cache, create, listener, info, error };
+  return { app, cache, create, listener, records };
 }
 
 describe('Request errors and traceability', () => {
+  it('adds Helmet security headers to the app routes', async () => {
+    const { app } = setup();
+    const response = await request(app).get(ApiPath.health);
+
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['x-frame-options']).toBe('SAMEORIGIN');
+    expect(response.headers['content-security-policy']).toContain(
+      "script-src 'self' 'unsafe-inline'",
+    );
+    expect(response.headers['content-security-policy']).not.toContain('upgrade-insecure-requests');
+  });
+
   it('traces the direct health route without exposing query values', async () => {
-    const { app, info } = setup();
+    const { app, records } = setup();
     const response = await request(app).get(`${ApiPath.health}?token=private`);
 
     expect(response.status).toBe(200);
-    expect(info.mock.calls[0]?.[0]).toMatchObject({
+    expect(getRequestLogAt(records)).toMatchObject({
       requestId: response.headers['x-request-id'],
       route: ApiPath.health,
       status: 200,
     });
-    expect(JSON.stringify(info.mock.calls)).not.toContain('private');
+    expect(JSON.stringify(records)).not.toContain('private');
   });
 
   it('generates distinct request IDs rather than trusting caller IDs', async () => {
-    const { app, info } = setup();
+    const { app, records } = setup();
     const first = await request(app).get(ApiPath.trades).set('X-Request-Id', 'untrusted');
     const second = await request(app).get(ApiPath.trades);
     const requestId = z.string().uuid().parse(first.headers['x-request-id']);
 
     expect(first.body).toEqual({ items: [] });
     expect(second.headers['x-request-id']).not.toBe(requestId);
-    expect(info.mock.calls[0]?.[0]).toMatchObject({
+    expect(getRequestLogAt(records)).toMatchObject({
       requestId,
       method: 'GET',
       route: ApiPath.trades,
       status: 200,
     });
-    expect(info.mock.calls[0]?.[0].durationMs).toBeGreaterThanOrEqual(0);
+    expect(getRequestLogAt(records).durationMs).toBeGreaterThanOrEqual(0);
   });
 
   it('returns field-level reasons with the same ID as the header and request log', async () => {
-    const { app, create, listener, info, error } = setup();
+    const { app, create, listener, records } = setup();
     const response = await request(app).post(ApiPath.trades).send({ quantity: 0 });
     const body = validationErrorSchema.parse(response.body);
 
@@ -92,12 +154,12 @@ describe('Request errors and traceability', () => {
     expect(Object.keys(body.error)).toEqual(['code', 'reason', 'requestId', 'details']);
     expect(create).not.toHaveBeenCalled();
     expect(listener).not.toHaveBeenCalled();
-    expect(error).not.toHaveBeenCalled();
-    expect(info.mock.calls[0]?.[0].requestId).toBe(body.error.requestId);
+    expect(getErrorLogs(records)).toHaveLength(0);
+    expect(getRequestLogAt(records).requestId).toBe(body.error.requestId);
   });
 
   it('handles malformed JSON before controller execution without exposing the payload', async () => {
-    const { app, create, info, error } = setup();
+    const { app, create, records } = setup();
     const response = await request(app)
       .post(`${ApiPath.trades}?token=private`)
       .set('Content-Type', 'application/json')
@@ -109,15 +171,15 @@ describe('Request errors and traceability', () => {
       { field: 'body', reason: 'Request body must be valid JSON.' },
     ]);
     expect(body.error.requestId).toBe(response.headers['x-request-id']);
-    expect(info.mock.calls[0]?.[0].route).toBe(ApiPath.trades);
-    expect(JSON.stringify(info.mock.calls)).not.toContain('private');
+    expect(getRequestLogAt(records).route).toBe(ApiPath.trades);
+    expect(JSON.stringify(records)).not.toContain('private');
     expect(response.text).not.toContain('secret');
     expect(create).not.toHaveBeenCalled();
-    expect(error).not.toHaveBeenCalled();
+    expect(getErrorLogs(records)).toHaveLength(0);
   });
 
   it('forwards asynchronous persistence failures once and stops cache/event updates', async () => {
-    const { app, cache, create, listener, info, error } = setup();
+    const { app, cache, create, listener, records } = setup();
     const cause = new Error('Sensitive database failure');
     create.mockRejectedValue(cause);
     const response = await request(app).post(ApiPath.trades).send({
@@ -136,25 +198,29 @@ describe('Request errors and traceability', () => {
     expect(response.text).not.toContain(cause.message);
     expect(cache.getAll()).toEqual([]);
     expect(listener).not.toHaveBeenCalled();
-    expect(error).toHaveBeenCalledTimes(1);
-    expect(error).toHaveBeenCalledWith({ requestId: body.error.requestId, error: cause });
-    expect(info).toHaveBeenCalledTimes(1);
+    const errorLogs = getErrorLogs(records);
+    expect(errorLogs).toHaveLength(1);
+    expect(errorLogs[0]).toMatchObject({
+      requestId: body.error.requestId,
+      err: { message: cause.message },
+    });
+    expect(getRequestLogs(records)).toHaveLength(1);
   });
 
   it('returns a traced JSON error for unknown routes without logging raw URLs', async () => {
-    const { app, info } = setup();
+    const { app, records } = setup();
     const response = await request(app).get('/unknown/private-id?token=secret');
     const body = routeNotFoundSchema.parse(response.body);
 
     expect(response.status).toBe(404);
     expect(body.error.requestId).toBe(response.headers['x-request-id']);
-    expect(info.mock.calls[0]?.[0].route).toBe('[unmatched]');
-    expect(JSON.stringify(info.mock.calls)).not.toContain('private-id');
-    expect(JSON.stringify(info.mock.calls)).not.toContain('secret');
+    expect(getRequestLogAt(records).route).toBe('[unmatched]');
+    expect(JSON.stringify(records)).not.toContain('private-id');
+    expect(JSON.stringify(records)).not.toContain('secret');
   });
 
   it('does not misclassify invalid server output as a client validation failure', async () => {
-    const { app, cache, error } = setup();
+    const { app, cache, records } = setup();
     cache.hydrate([
       {
         id: 'bad-record',
@@ -172,7 +238,7 @@ describe('Request errors and traceability', () => {
 
     expect(response.status).toBe(500);
     expect(body.error.code).toBe('INTERNAL_SERVER_ERROR');
-    expect(error).toHaveBeenCalledTimes(1);
+    expect(getErrorLogs(records)).toHaveLength(1);
     expect(response.text).not.toContain('quantity');
   });
 });

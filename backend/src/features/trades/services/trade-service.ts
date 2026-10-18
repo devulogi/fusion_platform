@@ -1,8 +1,12 @@
 import { TradeCache } from '../trade-cache.ts';
-import type { AmendTradeInput, CreateTradeInput, Trade } from '../models/trade.ts';
-import type { TradeRepositoryContract } from '../repositories/trade-repository.ts';
+import { TradeNotFoundError } from '../../../errors.ts';
+import type {
+  AmendTradeInput,
+  CreateTradeInput,
+  Trade,
+  TradeRepositoryContract,
+} from '../../../types.ts';
 import { TradeEventPublisher } from '../trade-event-publisher.ts';
-import { TradeNotFoundError } from '../trade-errors.ts';
 import {
   parseAmendTradeInput,
   parseCancelTradeInput,

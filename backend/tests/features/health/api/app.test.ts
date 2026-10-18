@@ -5,7 +5,7 @@ import { HealthController } from '../../../../src/features/health/controllers/he
 import { TradeController } from '../../../../src/features/trades/controllers/trade-controller.ts';
 import { TradeEventsController } from '../../../../src/features/trades/controllers/trade-events-controller.ts';
 import { TradeCache } from '../../../../src/features/trades/trade-cache.ts';
-import { healthResponseSchema } from '../../../../src/features/health/controllers/health-controller.ts';
+import { healthResponseSchema } from '../../../../src/schemas.ts';
 import { TradeRepository } from '../../../../src/features/trades/repositories/trade-repository.ts';
 import { TradeEventPublisher } from '../../../../src/features/trades/trade-event-publisher.ts';
 import { TradeService } from '../../../../src/features/trades/services/trade-service.ts';
