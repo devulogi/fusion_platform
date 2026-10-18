@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import TradeBlotterTable from './features/trades/trade-blotter-table';
+import type { Trade } from './features/trades/trade-schema';
 
 afterEach(cleanup);
 
@@ -17,9 +18,22 @@ const sampleTrade = {
   counterparty: 'Goldman Sachs',
 };
 
+function renderTable(trades: Trade[], isLoading: boolean, emptyMessage: string) {
+  return render(
+    <TradeBlotterTable
+      actionsDisabled={false}
+      emptyMessage={emptyMessage}
+      isLoading={isLoading}
+      onAmend={vi.fn()}
+      onCancel={vi.fn()}
+      trades={trades}
+    />,
+  );
+}
+
 describe('TradeBlotterTable', () => {
   it('displays required trade fields and optional fields in an accessible table', () => {
-    render(<TradeBlotterTable trades={[sampleTrade]} isLoading={false} emptyMessage="No trades" />);
+    renderTable([sampleTrade], false, 'No trades');
 
     const table = screen.getByRole('table', { name: 'Trade blotter' });
     const row = within(table).getByRole('row', { name: /TRD-100001/ });
@@ -37,13 +51,7 @@ describe('TradeBlotterTable', () => {
   });
 
   it('keeps nullable optional fields present in the row', () => {
-    render(
-      <TradeBlotterTable
-        trades={[{ ...sampleTrade, book: null, counterparty: null }]}
-        isLoading={false}
-        emptyMessage="No trades"
-      />,
-    );
+    renderTable([{ ...sampleTrade, book: null, counterparty: null }], false, 'No trades');
 
     const row = within(screen.getByRole('table', { name: 'Trade blotter' })).getByRole('row', {
       name: /TRD-100001/,
@@ -51,8 +59,19 @@ describe('TradeBlotterTable', () => {
     expect(within(row).getAllByRole('cell', { name: 'Not provided' })).toHaveLength(2);
   });
 
+  it('does not expose actions for a cancelled trade', () => {
+    renderTable([{ ...sampleTrade, status: 'CANCELLED' }], false, 'No trades');
+
+    const row = within(screen.getByRole('table', { name: 'Trade blotter' })).getByRole('row', {
+      name: /TRD-100001/,
+    });
+
+    expect(within(row).getByRole('cell', { name: 'No actions available' })).toBeInTheDocument();
+    expect(within(row).queryByRole('button')).not.toBeInTheDocument();
+  });
+
   it('shows a loading state while the first snapshot is pending', () => {
-    render(<TradeBlotterTable trades={[]} isLoading emptyMessage="No trades" />);
+    renderTable([], true, 'No trades');
 
     expect(screen.getByRole('status')).toHaveTextContent('Loading trades');
     expect(screen.getByRole('table', { name: 'Trade blotter' })).toHaveAttribute(
@@ -62,18 +81,16 @@ describe('TradeBlotterTable', () => {
   });
 
   it('shows an empty state after a successful empty snapshot', () => {
-    render(<TradeBlotterTable trades={[]} isLoading={false} emptyMessage="No trades yet" />);
+    renderTable([], false, 'No trades yet');
 
     expect(screen.getByRole('status')).toHaveTextContent('No trades yet');
   });
 
   it('sorts trades by symbol and exposes the current sort direction', () => {
-    render(
-      <TradeBlotterTable
-        trades={[{ ...sampleTrade, id: 'trade-msft', symbol: 'MSFT' }, sampleTrade]}
-        isLoading={false}
-        emptyMessage="No trades"
-      />,
+    renderTable(
+      [{ ...sampleTrade, id: 'trade-msft', symbol: 'MSFT' }, sampleTrade],
+      false,
+      'No trades',
     );
 
     const table = screen.getByRole('table', { name: 'Trade blotter' });
@@ -93,13 +110,7 @@ describe('TradeBlotterTable', () => {
       trader: 'ABROWN',
       status: 'CANCELLED' as const,
     };
-    render(
-      <TradeBlotterTable
-        trades={[sampleTrade, secondTrade]}
-        isLoading={false}
-        emptyMessage="No trades"
-      />,
-    );
+    renderTable([sampleTrade, secondTrade], false, 'No trades');
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Filter by symbol' }), {
       target: { value: 'AAPL' },
@@ -126,13 +137,7 @@ describe('TradeBlotterTable', () => {
       id: 'TRD-100002',
       trader: 'ABROWN',
     };
-    render(
-      <TradeBlotterTable
-        trades={[sampleTrade, secondTrade]}
-        isLoading={false}
-        emptyMessage="No trades"
-      />,
-    );
+    renderTable([sampleTrade, secondTrade], false, 'No trades');
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Filter by trader' }), {
       target: { value: 'JSMITH' },
