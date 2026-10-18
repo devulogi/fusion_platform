@@ -16,6 +16,7 @@ import {
 import type { Trade } from './features/trades/trade-schema';
 
 const tradeQueryKey = ['trades'] as const;
+const EVENT_STREAM_RETRY_DELAY_MS = 3_000;
 
 async function submitTradeCommand(
   path: string,
@@ -113,7 +114,8 @@ function App() {
     let snapshotLoading = false;
     let refreshQueued = false;
     let bufferedEvents: Trade[] = [];
-    const eventSource = new EventSource('/api/v1/events');
+    let eventSource: EventSource | null = null;
+    let retryTimer: number | null = null;
 
     const refreshSnapshot = async (): Promise<void> => {
       if (snapshotLoading) {
@@ -179,24 +181,47 @@ function App() {
       }
     };
 
-    for (const eventType of tradeEventTypes) {
-      eventSource.addEventListener(eventType, handleTradeEvent);
-    }
-
-    eventSource.onopen = () => {
+    const connectEventStream = (): void => {
       if (!isMounted) return;
-      setConnectionStatus('Live');
-      void refreshSnapshot();
+
+      const source = new EventSource('/api/v1/events');
+      eventSource = source;
+      for (const eventType of tradeEventTypes) {
+        source.addEventListener(eventType, handleTradeEvent);
+      }
+
+      source.onopen = () => {
+        if (!isMounted || eventSource !== source) return;
+        if (retryTimer !== null) {
+          window.clearTimeout(retryTimer);
+          retryTimer = null;
+        }
+        setConnectionStatus('Live');
+        void refreshSnapshot();
+      };
+
+      source.onerror = () => {
+        if (!isMounted || eventSource !== source) return;
+        setConnectionStatus('Reconnecting');
+        if (source.readyState !== EventSource.CLOSED || retryTimer !== null) return;
+
+        retryTimer = window.setTimeout(() => {
+          retryTimer = null;
+          if (!isMounted || eventSource !== source || source.readyState !== EventSource.CLOSED) {
+            return;
+          }
+          connectEventStream();
+        }, EVENT_STREAM_RETRY_DELAY_MS);
+      };
     };
 
-    eventSource.onerror = () => {
-      if (isMounted) setConnectionStatus('Reconnecting');
-    };
+    connectEventStream();
 
     return () => {
       isMounted = false;
       refreshSnapshotRef.current = null;
-      eventSource.close();
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+      eventSource?.close();
     };
   }, [queryClient, refetchTrades, setConnectionStatus]);
 

@@ -20,9 +20,13 @@ type TestTrade = {
 
 class MockEventSource {
   static instances: MockEventSource[] = [];
+  static readonly CLOSED = 2;
 
   readonly listeners = new Map<string, EventListener>();
-  readonly close = vi.fn();
+  readonly close = vi.fn(() => {
+    this.readyState = MockEventSource.CLOSED;
+  });
+  readyState = 0;
   onopen: (() => void) | null = null;
   onerror: (() => void) | null = null;
 
@@ -37,7 +41,13 @@ class MockEventSource {
   }
 
   open(): void {
+    this.readyState = 1;
     this.onopen?.();
+  }
+
+  failPermanently(): void {
+    this.readyState = MockEventSource.CLOSED;
+    this.onerror?.();
   }
 
   dispatchTrade(type: string, trade: TestTrade): void {
@@ -171,6 +181,39 @@ describe('App', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Live');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('creates a new event stream after a terminal connection error', async () => {
+    const fetchMock = installFetchMock();
+    fetchMock.mockResolvedValue(jsonResponse({ items: [activeTrade] }));
+    vi.useFakeTimers();
+
+    try {
+      renderApp();
+      const failedEventSource = MockEventSource.instances[0];
+      if (failedEventSource === undefined) throw new Error('Expected an EventSource connection');
+
+      act(() => failedEventSource.failPermanently());
+      expect(screen.getByText('Reconnecting', { exact: true })).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      const reconnectedEventSource = MockEventSource.instances[1];
+      if (reconnectedEventSource === undefined) {
+        throw new Error('Expected a replacement EventSource connection');
+      }
+      expect(reconnectedEventSource.url).toBe('/api/v1/events');
+
+      vi.useRealTimers();
+      act(() => reconnectedEventSource.open());
+
+      expect(await screen.findByRole('cell', { name: 'AAPL' })).toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent('Live');
+      expect(fetchMock).toHaveBeenCalledWith('/api/v1/trades');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('refreshes the snapshot on demand and shows the latest trades', async () => {
