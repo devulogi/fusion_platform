@@ -16,7 +16,7 @@ These stories translate the full-stack take-home assessment into frontend workfl
 - REST responses are authoritative for the initiating action; SSE delivers committed changes to other connected clients. Applying the same trade from both paths must upsert by trade ID rather than create duplicates.
 - The assessment's required core model is `id`, `symbol`, `quantity`, `price`, `side`, `trader`, `tradeDate`, and `status`. The sample's `book` and `counterparty` fields may also be shown when present.
 - Backend reactivation support exists, but reactivation is not required by the supplied assessment. Do not add a reactivation control unless explicitly approved.
-- Storybook/MSW and Playwright are desired test tools but are not configured in this repository. Request approval before adding their dependencies or project setup.
+- Storybook is configured for reusable component exploration. MSW and Playwright are not configured; request approval before adding their dependencies or project setup.
 
 ## Stories
 
@@ -117,7 +117,7 @@ As a connected blotter user, I want committed changes from other clients to appe
 
 ## Cross-cutting quality criteria
 
-- Use React Testing Library for accessible, user-observable component behavior. Use Storybook/MSW for isolated component states and mocked API responses when approved and configured. Reserve Playwright for a small number of critical end-to-end user journeys when configured.
+- Use React Testing Library for accessible, user-observable component behavior. Use Storybook stories for reusable component states and visual variants; use MSW for mocked API responses only when approved and configured. Reserve Playwright for a small number of critical end-to-end user journeys when configured.
 - Use an app-level error boundary for unexpected render failures. Its fallback is accessible and safe, supports retry/reset and reload, and does not display raw error details.
 - Keep trade data in TanStack Query rather than duplicating it in Context. Use Context only for shared client state; keep drafts and transient presentation state local.
 - Preserve the shared frontend interaction, motion, focus, loading, touch-target, and form conventions in `.github/instructions/frontend.instructions.md`.
