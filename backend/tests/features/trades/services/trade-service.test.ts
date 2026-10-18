@@ -1,14 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  TradeCache,
-  TradeCacheNotHydratedError,
-} from '../../../../src/features/trades/trade-cache.ts';
+import { TradeCache } from '../../../../src/features/trades/trade-cache.ts';
+import { TradeCacheNotHydratedError } from '../../../../src/errors.ts';
 import type {
   AmendTradeInput,
   CreateTradeInput,
   Trade,
-} from '../../../../src/features/trades/models/trade.ts';
-import type { TradeRepositoryContract } from '../../../../src/features/trades/repositories/trade-repository.ts';
+  TradeRepositoryContract,
+} from '../../../../src/types.ts';
 import { TradeEventPublisher } from '../../../../src/features/trades/trade-event-publisher.ts';
 import { TradeService } from '../../../../src/features/trades/services/trade-service.ts';
 

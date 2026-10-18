@@ -2,7 +2,7 @@ import express from 'express';
 import swaggerUi from 'swagger-ui-express';
 import { stringify } from 'yaml';
 import { openApiDocument } from './api-contract.ts';
-import { recordRequestRoute } from '../request-context.ts';
+import { recordRequestRoute } from '../middleware.ts';
 
 const openApiSpecification = stringify(openApiDocument);
 const router = express.Router();

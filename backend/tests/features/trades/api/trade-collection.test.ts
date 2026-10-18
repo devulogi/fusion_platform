@@ -2,30 +2,21 @@ import { describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import {
   tradeNotAmendableSchema,
-  tradeNotFoundSchema,
+  tradeNotFoundErrorSchema,
   validationErrorSchema,
-} from '../../../../src/http/api-errors.ts';
+  tradeCollectionResponseSchema,
+  tradeResponseSchema,
+} from '../../../../src/schemas.ts';
 import { createApp } from '../../../../src/app.ts';
-import { ApiPath } from '../../../../src/http/constants.ts';
+import { ApiPath, TradeEventType } from '../../../../src/constants.ts';
 import { HealthController } from '../../../../src/features/health/controllers/health-controller.ts';
 import { TradeController } from '../../../../src/features/trades/controllers/trade-controller.ts';
 import { TradeCache } from '../../../../src/features/trades/trade-cache.ts';
-import {
-  tradeCollectionResponseSchema,
-  tradeResponseSchema,
-} from '../../../../src/features/trades/serializers/trade-serializer.ts';
-import type { Trade } from '../../../../src/features/trades/models/trade.ts';
-import {
-  TradeEventPublisher,
-  TradeEventType,
-} from '../../../../src/features/trades/trade-event-publisher.ts';
-import type { TradeRepositoryContract } from '../../../../src/features/trades/repositories/trade-repository.ts';
+import type { Trade, TradeRepositoryContract } from '../../../../src/types.ts';
+import { TradeEventPublisher } from '../../../../src/features/trades/trade-event-publisher.ts';
 import { TradeEventsController } from '../../../../src/features/trades/controllers/trade-events-controller.ts';
 import { TradeService } from '../../../../src/features/trades/services/trade-service.ts';
-import {
-  TradeNotAmendableError,
-  TradeNotFoundError,
-} from '../../../../src/features/trades/trade-errors.ts';
+import { TradeNotAmendableError, TradeNotFoundError } from '../../../../src/errors.ts';
 
 class FailingTradeCache extends TradeCache {
   override getAll(): readonly never[] {
@@ -134,6 +125,30 @@ describe('GET /api/trades', () => {
     expect(tradeCollectionResponseSchema.parse(response.body)).toEqual({
       items: [],
     });
+  });
+
+  it('compresses large collection responses when the client accepts gzip', async () => {
+    const tradeCache = new TradeCache();
+    tradeCache.hydrate(
+      Array.from({ length: 30 }, (_, index) => ({
+        id: `trade-${index}`,
+        symbol: 'AAPL',
+        quantity: 100,
+        price: 185.25,
+        side: 'BUY' as const,
+        trader: `Trader ${index}`,
+        tradeDate: '2026-10-14T12:00:00.000Z',
+        status: 'ACTIVE' as const,
+      })),
+    );
+
+    const response = await request(createTestApp(tradeCache))
+      .get(ApiPath.trades)
+      .set('Accept-Encoding', 'gzip');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-encoding']).toBe('gzip');
+    expect(tradeCollectionResponseSchema.parse(response.body).items).toHaveLength(30);
   });
 
   it('returns a generic error response for unexpected failures', async () => {
@@ -329,7 +344,7 @@ describe('GET /api/v1/trades/:tradeId', () => {
     );
 
     expect(response.status).toBe(404);
-    expect(tradeNotFoundSchema.parse(response.body).error.code).toBe('TRADE_NOT_FOUND');
+    expect(tradeNotFoundErrorSchema.parse(response.body).error.code).toBe('TRADE_NOT_FOUND');
   });
 
   it('returns a validation error for an invalid trade ID', async () => {
@@ -510,7 +525,7 @@ describe('PATCH /api/v1/trades/:tradeId', () => {
       .send({ status: 'CANCELLED' });
 
     expect(response.status).toBe(404);
-    expect(tradeNotFoundSchema.parse(response.body).error.code).toBe('TRADE_NOT_FOUND');
+    expect(tradeNotFoundErrorSchema.parse(response.body).error.code).toBe('TRADE_NOT_FOUND');
     expect(tradeCache.getAll()).toEqual([activeTrade]);
   });
 
@@ -543,7 +558,7 @@ describe('PATCH /api/v1/trades/:tradeId', () => {
 
     expect(response.status).toBe(status);
     const responseSchema =
-      code === 'TRADE_NOT_FOUND' ? tradeNotFoundSchema : tradeNotAmendableSchema;
+      code === 'TRADE_NOT_FOUND' ? tradeNotFoundErrorSchema : tradeNotAmendableSchema;
     expect(responseSchema.parse(response.body).error.code).toBe(code);
     expect(tradeCache.getAll()).toEqual([activeTrade]);
   });

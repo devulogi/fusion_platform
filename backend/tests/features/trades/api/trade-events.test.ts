@@ -1,7 +1,7 @@
 import { get, type IncomingMessage } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../../src/app.ts';
-import { ApiPath } from '../../../../src/http/constants.ts';
+import { ApiPath } from '../../../../src/constants.ts';
 import { HealthController } from '../../../../src/features/health/controllers/health-controller.ts';
 import { TradeController } from '../../../../src/features/trades/controllers/trade-controller.ts';
 import { TradeEventsController } from '../../../../src/features/trades/controllers/trade-events-controller.ts';
@@ -9,7 +9,7 @@ import { TradeCache } from '../../../../src/features/trades/trade-cache.ts';
 import { TradeRepository } from '../../../../src/features/trades/repositories/trade-repository.ts';
 import { TradeEventPublisher } from '../../../../src/features/trades/trade-event-publisher.ts';
 import { TradeService } from '../../../../src/features/trades/services/trade-service.ts';
-import { serializeTrade } from '../../../../src/features/trades/serializers/trade-serializer.ts';
+import { serializeTrade } from '../../../../src/features/trades/trade-serializer.ts';
 
 describe('GET /api/v1/events', () => {
   it('streams canonical created, amended, cancelled, and reactivated trade events', async () => {
@@ -68,6 +68,7 @@ describe('GET /api/v1/events', () => {
       streamResponse = await responsePromise;
       expect(streamResponse.statusCode).toBe(200);
       expect(streamResponse.headers['content-type']).toContain('text/event-stream');
+      expect(streamResponse.headers['content-encoding']).toBeUndefined();
 
       const eventTextPromise = new Promise<string>((resolve) => {
         let eventText = '';
