@@ -1,8 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import AmendTradeDialog from './amend-trade-dialog';
-import type { AmendTradeInput } from './amend-trade-dialog';
-import type { Trade } from './trade-schema';
+import AmendTradeDialog from './index';
+import type { AmendTradeInput } from './index';
+import type { Trade } from '../../trade-schema';
 
 afterEach(cleanup);
 

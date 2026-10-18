@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import TradeBlotterTable from './trade-blotter-table';
-import type { Trade } from './trade-schema';
+import TradeBlotterTable from './index';
+import type { Trade } from '../../trade-schema';
 
 const trades: Trade[] = [
   {
