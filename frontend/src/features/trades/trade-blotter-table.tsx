@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Ban, ArrowDown, ArrowUp, ArrowUpDown, Pencil } from 'lucide-react';
 import {
   createColumnHelper,
   flexRender,
@@ -15,11 +15,14 @@ type TradeBlotterTableProps = {
   trades: Trade[];
   isLoading: boolean;
   emptyMessage: string;
+  actionsDisabled: boolean;
+  onAmend: (trade: Trade) => void;
+  onCancel: (trade: Trade) => void;
 };
 
 const columnHelper = createColumnHelper<Trade>();
 
-const columns = [
+const tradeColumns = [
   columnHelper.accessor('id', { header: 'Trade ID' }),
   columnHelper.accessor('symbol', { header: 'Symbol' }),
   columnHelper.accessor('side', {
@@ -74,15 +77,58 @@ const columnLabels: Record<string, string> = {
   status: 'Status',
   book: 'Book',
   counterparty: 'Counterparty',
+  actions: 'Actions',
 };
 
 export default function TradeBlotterTable({
   trades,
   isLoading,
   emptyMessage,
+  actionsDisabled,
+  onAmend,
+  onCancel,
 }: TradeBlotterTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const columns = useMemo(
+    () => [
+      ...tradeColumns,
+      columnHelper.display({
+        id: 'actions',
+        header: 'Actions',
+        cell: ({ row }) => {
+          const trade = row.original;
+          if (trade.status !== 'ACTIVE') {
+            return <span aria-label="No actions available">—</span>;
+          }
+
+          return (
+            <div className="flex items-center gap-1">
+              <button
+                aria-label={`Amend ${trade.id}`}
+                className="min-h-11 min-w-11 rounded-md p-2.5 text-[#58665e] transition-colors duration-200 ease-out hover:bg-[#f3f5f2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={actionsDisabled}
+                onClick={() => onAmend(trade)}
+                type="button"
+              >
+                <Pencil aria-hidden="true" size={16} />
+              </button>
+              <button
+                aria-label={`Cancel ${trade.id}`}
+                className="min-h-11 min-w-11 rounded-md p-2.5 text-red-600 transition-colors duration-200 ease-out hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={actionsDisabled}
+                onClick={() => onCancel(trade)}
+                type="button"
+              >
+                <Ban aria-hidden="true" size={16} />
+              </button>
+            </div>
+          );
+        },
+      }),
+    ],
+    [actionsDisabled, onAmend, onCancel],
+  );
   const table = useReactTable({
     data: trades,
     columns,

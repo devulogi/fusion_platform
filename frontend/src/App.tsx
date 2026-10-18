@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { useConnectionStatus } from './contexts/connection-status-context';
+import AmendTradeDialog from './features/trades/amend-trade-dialog';
+import type { AmendTradeInput } from './features/trades/amend-trade-dialog';
+import CancelTradeDialog from './features/trades/cancel-trade-dialog';
+import CreateTradeDialog from './features/trades/create-trade-dialog';
+import type { CreateTradeInput } from './features/trades/create-trade-dialog';
 import TradeBlotterTable from './features/trades/trade-blotter-table';
 import {
   tradeCollectionSchema,
@@ -11,6 +16,25 @@ import {
 import type { Trade } from './features/trades/trade-schema';
 
 const tradeQueryKey = ['trades'] as const;
+
+async function submitTradeCommand(
+  path: string,
+  method: 'POST' | 'PATCH',
+  body: object,
+): Promise<Trade> {
+  const response = await fetch(path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error('Trade command failed');
+
+  const payload: unknown = await response.json();
+  const result = tradeSchema.safeParse(payload);
+  if (!result.success) throw new Error('Trade command response was invalid');
+
+  return result.data;
+}
 
 async function fetchTradeSnapshot(): Promise<Trade[]> {
   const response = await fetch('/api/v1/trades');
@@ -51,6 +75,37 @@ function App() {
   const { connectionStatus, setConnectionStatus } = useConnectionStatus();
   const [refreshFailed, setRefreshFailed] = useState(false);
   const refreshSnapshotRef = useRef<(() => Promise<void>) | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [tradeToAmend, setTradeToAmend] = useState<Trade | null>(null);
+  const [tradeToCancel, setTradeToCancel] = useState<Trade | null>(null);
+
+  const updateTradeCache = (savedTrade: Trade): void => {
+    queryClient.setQueryData<Trade[]>(tradeQueryKey, (currentTrades) =>
+      upsertTrade(currentTrades ?? [], savedTrade),
+    );
+  };
+
+  const createTradeMutation = useMutation({
+    mutationFn: (input: CreateTradeInput) => submitTradeCommand('/api/v1/trades', 'POST', input),
+    onSuccess: updateTradeCache,
+  });
+  const amendTradeMutation = useMutation({
+    mutationFn: ({ tradeId, input }: { tradeId: string; input: AmendTradeInput }) =>
+      submitTradeCommand(`/api/v1/trades/${encodeURIComponent(tradeId)}`, 'PATCH', input),
+    onSuccess: updateTradeCache,
+  });
+  const cancelTradeMutation = useMutation({
+    mutationFn: (tradeId: string) =>
+      submitTradeCommand(`/api/v1/trades/${encodeURIComponent(tradeId)}`, 'PATCH', {
+        status: 'CANCELLED',
+      }),
+    onSuccess: updateTradeCache,
+  });
+
+  const openAmendDialog = useCallback((trade: Trade) => setTradeToAmend(trade), []);
+  const closeAmendDialog = useCallback(() => setTradeToAmend(null), []);
+  const openCancelDialog = useCallback((trade: Trade) => setTradeToCancel(trade), []);
+  const closeCancelDialog = useCallback(() => setTradeToCancel(null), []);
 
   useEffect(() => {
     let isMounted = true;
@@ -176,6 +231,13 @@ function App() {
               {trades.length.toLocaleString()} {trades.length === 1 ? 'trade' : 'trades'}
             </p>
             <button
+              className="min-h-11 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-all duration-150 ease-out hover:scale-[1.01] hover:bg-blue-500 active:scale-[0.98] active:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              onClick={() => setIsCreateDialogOpen(true)}
+              type="button"
+            >
+              New trade
+            </button>
+            <button
               aria-label="Refresh trades"
               aria-busy={isFetching}
               className="inline-flex min-h-11 items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-all duration-150 ease-out hover:scale-[1.01] hover:bg-blue-500 active:scale-[0.98] active:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
@@ -210,8 +272,39 @@ function App() {
           trades={trades}
           isLoading={!isFetched && !snapshotUnavailable}
           emptyMessage={snapshotUnavailable ? 'No snapshot available' : 'No trades yet'}
+          actionsDisabled={
+            createTradeMutation.isPending ||
+            amendTradeMutation.isPending ||
+            cancelTradeMutation.isPending
+          }
+          onAmend={openAmendDialog}
+          onCancel={openCancelDialog}
         />
       </section>
+      <CreateTradeDialog
+        open={isCreateDialogOpen}
+        isPending={createTradeMutation.isPending}
+        onClose={() => setIsCreateDialogOpen(false)}
+        onSubmit={(input) => createTradeMutation.mutateAsync(input)}
+      />
+      {tradeToAmend !== null && (
+        <AmendTradeDialog
+          open
+          trade={tradeToAmend}
+          isPending={amendTradeMutation.isPending}
+          onClose={closeAmendDialog}
+          onSubmit={(tradeId, input) => amendTradeMutation.mutateAsync({ tradeId, input })}
+        />
+      )}
+      {tradeToCancel !== null && (
+        <CancelTradeDialog
+          open
+          trade={tradeToCancel}
+          isPending={cancelTradeMutation.isPending}
+          onClose={closeCancelDialog}
+          onConfirm={(tradeId) => cancelTradeMutation.mutateAsync(tradeId)}
+        />
+      )}
     </main>
   );
 }
