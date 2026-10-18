@@ -10,7 +10,10 @@ import { ApiPath } from '../../../../src/http/constants.ts';
 import { HealthController } from '../../../../src/features/health/controllers/health-controller.ts';
 import { TradeController } from '../../../../src/features/trades/controllers/trade-controller.ts';
 import { TradeCache } from '../../../../src/features/trades/trade-cache.ts';
-import { tradeCollectionResponseSchema } from '../../../../src/features/trades/serializers/trade-serializer.ts';
+import {
+  tradeCollectionResponseSchema,
+  tradeResponseSchema,
+} from '../../../../src/features/trades/serializers/trade-serializer.ts';
 import type { Trade } from '../../../../src/features/trades/models/trade.ts';
 import {
   TradeEventPublisher,
@@ -208,6 +211,54 @@ describe('GET /api/trades', () => {
     expect(receivedEvents).toEqual([{ type: TradeEventType.CREATED, trade: createdTrade }]);
   });
 
+  it('keeps a successful response when an event subscriber throws', async () => {
+    const tradeCache = new TradeCache();
+    tradeCache.hydrate([]);
+    const tradeEventPublisher = new TradeEventPublisher();
+    tradeEventPublisher.subscribe(() => {
+      throw new Error('Disconnected event subscriber');
+    });
+    const createdTrade: Trade = {
+      id: 'generated-id',
+      symbol: 'AAPL',
+      quantity: 100,
+      price: 185.25,
+      side: 'BUY',
+      trader: 'Alex Morgan',
+      tradeDate: '2026-10-14T12:00:00.000Z',
+      status: 'ACTIVE',
+    };
+    const tradeRepository: TradeRepositoryContract = {
+      findAll: () => Promise.resolve([]),
+      create: vi.fn<TradeRepositoryContract['create']>().mockResolvedValue(createdTrade),
+      amend: () => Promise.reject(new Error('Not used in event failure test')),
+      cancel: () => Promise.reject(new Error('Not used in event failure test')),
+    };
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    try {
+      const response = await request(
+        createTestApp(tradeCache, tradeRepository, tradeEventPublisher),
+      )
+        .post(ApiPath.trades)
+        .send({
+          symbol: 'AAPL',
+          quantity: 100,
+          price: 185.25,
+          side: 'BUY',
+          trader: 'Alex Morgan',
+          tradeDate: '2026-10-14T12:00:00.000Z',
+          status: 'ACTIVE',
+        });
+
+      expect(response.status).toBe(201);
+      expect(tradeCache.getAll()).toEqual([createdTrade]);
+      expect(consoleError).toHaveBeenCalledOnce();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it('returns structured validation errors without persisting or publishing', async () => {
     const tradeCache = new TradeCache();
     tradeCache.hydrate([]);
@@ -236,6 +287,57 @@ describe('GET /api/trades', () => {
     expect(createTrade).not.toHaveBeenCalled();
     expect(tradeCache.getAll()).toEqual([]);
     expect(receivedEvents).toEqual([]);
+  });
+});
+
+describe('GET /api/v1/trades/:tradeId', () => {
+  const trade: Trade = {
+    id: 'trade-1',
+    symbol: 'AAPL',
+    quantity: 100,
+    price: 185.25,
+    side: 'BUY',
+    trader: 'Alex Morgan',
+    tradeDate: '2026-10-14T12:00:00.000Z',
+    status: 'ACTIVE',
+  };
+
+  it('returns the cached trade by ID', async () => {
+    const tradeCache = new TradeCache();
+    tradeCache.hydrate([trade]);
+
+    const response = await request(createTestApp(tradeCache)).get(`${ApiPath.trades}/${trade.id}`);
+
+    expect(response.status).toBe(200);
+    expect(tradeResponseSchema.parse(response.body)).toEqual({
+      ...trade,
+      book: null,
+      counterparty: null,
+    });
+  });
+
+  it('returns the standard 404 error for an unknown trade ID', async () => {
+    const tradeCache = new TradeCache();
+    tradeCache.hydrate([]);
+
+    const response = await request(createTestApp(tradeCache)).get(
+      `${ApiPath.trades}/missing-trade`,
+    );
+
+    expect(response.status).toBe(404);
+    expect(tradeNotFoundSchema.parse(response.body).error.code).toBe('TRADE_NOT_FOUND');
+  });
+
+  it('returns a validation error for an invalid trade ID', async () => {
+    const tradeCache = new TradeCache();
+    tradeCache.hydrate([]);
+
+    const response = await request(createTestApp(tradeCache)).get(
+      `${ApiPath.trades}/${'x'.repeat(33)}`,
+    );
+
+    expect(response.status).toBe(400);
+    expect(validationErrorSchema.parse(response.body).error.code).toBe('VALIDATION_FAILED');
   });
 });
 

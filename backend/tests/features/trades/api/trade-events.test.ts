@@ -1,5 +1,5 @@
 import { get, type IncomingMessage } from 'node:http';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../../src/app.ts';
 import { ApiPath } from '../../../../src/http/constants.ts';
 import { HealthController } from '../../../../src/features/health/controllers/health-controller.ts';
@@ -16,6 +16,19 @@ describe('GET /api/v1/events', () => {
     const tradeCache = new TradeCache();
     tradeCache.hydrate([]);
     const tradeEventPublisher = new TradeEventPublisher();
+    const originalSubscribe = tradeEventPublisher.subscribe.bind(tradeEventPublisher);
+    let resolveSubscriberRemoved = () => undefined;
+    const subscriberRemoved = new Promise<void>((resolve) => {
+      resolveSubscriberRemoved = resolve;
+    });
+    const unsubscribe = vi.fn(() => resolveSubscriberRemoved());
+    vi.spyOn(tradeEventPublisher, 'subscribe').mockImplementation((listener) => {
+      const removeListener = originalSubscribe(listener);
+      return () => {
+        removeListener();
+        unsubscribe();
+      };
+    });
     const app = createApp({
       healthController: new HealthController(),
       tradeController: new TradeController(
@@ -36,6 +49,7 @@ describe('GET /api/v1/events', () => {
     });
     const server = app.listen(0);
     let streamResponse: IncomingMessage | undefined;
+    let reconnectedResponse: IncomingMessage | undefined;
 
     try {
       await new Promise<void>((resolve) => server.once('listening', resolve));
@@ -90,8 +104,33 @@ describe('GET /api/v1/events', () => {
       expect(eventText).toContain(
         `data: ${JSON.stringify(serializeTrade({ ...trade, status: 'CANCELLED' }))}`,
       );
+
+      streamResponse.destroy();
+      await subscriberRemoved;
+      expect(unsubscribe).toHaveBeenCalledOnce();
+
+      const reconnectResponsePromise = new Promise<IncomingMessage>((resolve, reject) => {
+        const clientRequest = get(
+          { host: '127.0.0.1', port: address.port, path: ApiPath.tradeEvents },
+          resolve,
+        );
+        clientRequest.once('error', reject);
+      });
+      reconnectedResponse = await reconnectResponsePromise;
+      expect(reconnectedResponse.statusCode).toBe(200);
+
+      const reconnectedEventPromise = new Promise<string>((resolve) => {
+        let eventText = '';
+        reconnectedResponse?.on('data', (chunk: Buffer | string) => {
+          eventText += chunk.toString();
+          if (eventText.includes('event: trade.created')) resolve(eventText);
+        });
+      });
+      tradeEventPublisher.publishTradeCreated({ ...trade, id: 'reconnected-trade' });
+      expect(await reconnectedEventPromise).toContain('event: trade.created\n');
     } finally {
       streamResponse?.destroy();
+      reconnectedResponse?.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });

@@ -16,6 +16,13 @@ export const tradeResponseSchema = z
   })
   .openapi('Trade');
 
+export const tradeNotFoundSchema = z
+  .object({
+    message: z.string(),
+  })
+  .strict()
+  .openapi('TradeNotFound');
+
 export const tradeCollectionResponseSchema = z
   .object({
     items: z.array(tradeResponseSchema),
@@ -25,6 +32,7 @@ export const tradeCollectionResponseSchema = z
 
 export type TradeResponse = z.infer<typeof tradeResponseSchema>;
 export type TradeCollectionResponse = z.infer<typeof tradeCollectionResponseSchema>;
+export type TradeNotFound = z.infer<typeof tradeNotFoundSchema>;
 
 export function serializeTrade(trade: Trade): TradeResponse {
   return tradeResponseSchema.parse({
