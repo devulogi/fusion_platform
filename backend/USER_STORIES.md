@@ -11,7 +11,7 @@ These stories translate the take-home requirements into backend behavior. Implem
 - Clients send create, amend, and cancel commands through REST. Server-to-client changes are delivered over SSE.
 - The persisted trade contract uses the assessment's required fields: ID, symbol, side, quantity, price, trader, trade date, and status. Book and counterparty are optional sample-data fields.
 - Confirmed for Story 5: cancelled trades cannot be amended. Amendments do not use version-based optimistic concurrency.
-- Confirmed for Story 5: reactivation uses `PATCH /api/v1/trades/:tradeId` with `{ "status": "ACTIVE" }`; repeating reactivation is idempotent and does not publish a duplicate event.
+- Confirmed for Story 5: cancellation is terminal; the backend does not accept a direct transition from `CANCELLED` to `ACTIVE`.
 - Confirmed for Story 6: repeated cancellation is idempotent, returns HTTP `200`, and does not publish a duplicate event.
 
 ## Stories
@@ -78,25 +78,22 @@ As a trader, I want to create a trade so it is persisted and visible to all conn
 
 **Implementation:** The POST route and service validate input using the same Zod schema, including when the service is called outside HTTP. The repository persists through Prisma and returns the canonical saved trade; the service updates the cache, then publishes `trade.created`; the controller returns the serialized trade with HTTP `201`. Omitted optional `book` and `counterparty` fields are represented as `null` in the response. JSON errors contain `{ error: { code, reason, requestId } }`, with `details: [{ field, reason }]` for validation failures. Responses include a server-generated `X-Request-Id`, correlated with request/error logs.
 
-### 5. Amend or reactivate a trade
+### 5. Amend an active trade
 
 **Status:** Implemented
 
-As a trader, I want to amend an active trade or reactivate one cancelled by mistake so the corrected state is reflected in the blotter and visible to other users.
+As a trader, I want to amend an active trade so the corrected state is reflected in the blotter and visible to other users.
 
 **Acceptance criteria**
 
 - `PATCH /api/v1/trades/:tradeId` validates the permitted amendment fields.
 - A valid amendment is persisted first, then the saved trade replaces the cached entry, then `trade.amended` is emitted.
-- `PATCH /api/v1/trades/:tradeId` accepts the reactivation command `{ "status": "ACTIVE" }`, distinct from amendment and cancellation request bodies.
-- Reactivation changes a cancelled trade to `ACTIVE` without changing its other fields, then updates the cache and emits `trade.reactivated` using the canonical saved trade.
-- Reactivating an already-active trade returns HTTP `200` with the canonical trade and does not publish a duplicate event.
 - The response contains the persisted trade.
 - An unknown trade returns HTTP `404`; invalid fields return HTTP `400`.
-- A cancelled trade cannot be amended; it must be reactivated explicitly before amendment.
+- A cancelled trade cannot be amended or transitioned directly back to `ACTIVE`.
 - Amendment accepts all editable trade fields except `id` and `status`; no version field or optimistic concurrency check is used.
 
-**Implementation:** Ordinary amendments use strict partial updates of active trades. Reactivation accepts the strict `{ "status": "ACTIVE" }` command and conditionally changes a cancelled trade to active without changing its other fields. The repository returns the canonical record; the service updates the cache and publishes `trade.reactivated` only when state changes. Repeating the command returns HTTP `200` without a duplicate event. Unknown IDs return `404`; invalid commands return `400`; persistence failures leave the cache and event stream unchanged.
+**Implementation:** Amendments use strict partial updates of active trades. The PATCH schema rejects status changes, including `{ "status": "ACTIVE" }`; unknown IDs return `404`, invalid commands return `400`, and cancelled trades cannot be amended. Persistence failures leave the cache and event stream unchanged.
 
 ### 6. Cancel a trade
 
@@ -124,14 +121,14 @@ As a connected blotter user, I want other users' committed trade changes pushed 
 **Acceptance criteria**
 
 - `GET /api/v1/events` opens an SSE stream with the correct `text/event-stream` content type.
-- The server sends named `trade.created`, `trade.amended`, `trade.cancelled`, and `trade.reactivated` events containing the canonical saved trade.
+- The server sends named `trade.created`, `trade.amended`, and `trade.cancelled` events containing the canonical saved trade.
 - The event publisher runs only after a successful database mutation and cache update.
 - A disconnected client is removed from active subscribers and can reconnect.
 - Events are process-local and not durable. After reconnect, the client reloads `GET /api/v1/trades` to reconcile missed events.
 - The client opens the event stream before fetching its initial snapshot and reconciles events received during that fetch, avoiding a snapshot/subscribe gap.
 - SSE delivery errors do not roll back committed data or change the successful REST response.
 
-**Implementation:** `GET /api/v1/events` streams canonical `trade.created`, `trade.amended`, `trade.cancelled`, and `trade.reactivated` events. Each browser connection owns one EventSource and is removed from the publisher when the response closes. The frontend waits for the stream to open before fetching `GET /api/v1/trades`, buffers events while each snapshot is in flight, and applies those events over the returned collection. EventSource reconnects automatically; every reconnection triggers a fresh collection fetch to recover changes missed while disconnected. Event delivery failures are isolated from successful REST mutations. Event IDs, durable replay, and multi-instance fan-out are not implemented.
+**Implementation:** `GET /api/v1/events` streams canonical `trade.created`, `trade.amended`, and `trade.cancelled` events. Each browser connection owns one EventSource and is removed from the publisher when the response closes. The frontend waits for the stream to open before fetching `GET /api/v1/trades`, buffers events while each snapshot is in flight, and applies those events over the returned collection. EventSource reconnects automatically; every reconnection triggers a fresh collection fetch to recover changes missed while disconnected. Event delivery failures are isolated from successful REST mutations. Event IDs, durable replay, and multi-instance fan-out are not implemented.
 
 ### 8. Explore the API contract
 
@@ -146,7 +143,7 @@ As an interviewer or frontend developer, I want a browsable API contract so I ca
 - The specification is updated alongside API changes and does not present planned endpoints as implemented.
 - The SSE endpoint documents its `text/event-stream` response, event names, payload shape, and reconnect expectations. Any SSE details not represented clearly by the chosen OpenAPI tooling are documented alongside the specification.
 
-**Implementation:** Swagger UI is served at `/api-docs` (redirecting to `/api-docs/`) on the backend's existing port, with the generated specification at `/api-docs/openapi.yaml`. The specification describes implemented liveness, collection, creation, amendment/cancellation, and SSE behavior, request/response schemas, error statuses, and request-ID headers. The PATCH request documents both amendment fields and the strict cancellation command. The SSE operation documents the `trade.created`, `trade.amended`, and `trade.cancelled` payloads and wire examples, retry interval, lack of durable replay, and client recovery expectations. Client reconciliation remains unimplemented; Swagger UI is not an SSE event viewer.
+**Implementation:** Swagger UI is served at `/api-docs` (redirecting to `/api-docs/`) on the backend's existing port, with the generated specification at `/api-docs/openapi.yaml`. The specification describes implemented liveness, collection, creation, amendment/cancellation, and SSE behavior, request/response schemas, error statuses, and request-ID headers. The PATCH request documents amendment fields and the strict cancellation command, and explicitly disallows returning a cancelled trade to `ACTIVE`. The SSE operation documents the `trade.created`, `trade.amended`, and `trade.cancelled` payloads and wire examples, retry interval, lack of durable replay, and client recovery expectations. Client reconciliation remains unimplemented; Swagger UI is not an SSE event viewer.
 
 ### 9. Review the backend architecture
 

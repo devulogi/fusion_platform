@@ -27,18 +27,9 @@ export const cancelTradeInputSchema = z
   .strict()
   .openapi('CancelTradeRequest');
 
-export const reactivateTradeInputSchema = z
-  .object({ status: z.literal(TRADE_STATUS.ACTIVE) })
-  .strict()
-  .openapi('ReactivateTradeRequest');
-
 export const tradeIdSchema = z.string().min(1).max(32);
 export const tradeIdParamsSchema = z.object({ tradeId: tradeIdSchema });
-export const tradeMutationInputSchema = z.union([
-  amendTradeInputSchema,
-  cancelTradeInputSchema,
-  reactivateTradeInputSchema,
-]);
+export const tradeMutationInputSchema = z.union([amendTradeInputSchema, cancelTradeInputSchema]);
 
 export const tradeResponseSchema = z
   .object({

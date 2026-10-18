@@ -45,11 +45,9 @@ const cancelledTradeExample = tradeResponseSchema.parse({
   status: TRADE_STATUS.CANCELLED,
 });
 const cancelledEventExample = `retry: 3000\n\nevent: ${TradeEventType.CANCELLED}\ndata: ${JSON.stringify(cancelledTradeExample)}\n\n`;
-const reactivatedEventExample = `retry: 3000\n\nevent: ${TradeEventType.REACTIVATED}\ndata: ${JSON.stringify(tradeExample)}\n\n`;
 registry.register('TradeCreatedEventData', tradeResponseSchema);
 registry.register('TradeAmendedEventData', tradeResponseSchema);
 registry.register('TradeCancelledEventData', tradeResponseSchema);
-registry.register('TradeReactivatedEventData', tradeResponseSchema);
 
 registry.registerPath({
   method: 'post',
@@ -219,10 +217,10 @@ registry.registerPath({
 registry.registerPath({
   method: 'patch',
   path: `${ApiPath.trades}/{tradeId}`,
-  operationId: 'amendCancelOrReactivateTrade',
-  summary: 'Amend, cancel, or reactivate a trade',
+  operationId: 'amendOrCancelTrade',
+  summary: 'Amend or cancel a trade',
   description:
-    'Accepts editable amendment fields (excluding id and status), the cancellation command { status: CANCELLED }, or the reactivation command { status: ACTIVE }. Each state change is persisted before the cache is replaced and its typed event is published. Reactivation only changes status; repeating cancellation or reactivation returns the canonical trade without publishing a duplicate event.',
+    'Accepts editable amendment fields (excluding id and status) or the cancellation command { status: CANCELLED }. Each change is persisted before the cache is replaced and its typed event is published. Repeating cancellation returns the canonical trade without publishing a duplicate event. A cancelled trade cannot be returned to ACTIVE.',
   request: {
     params: tradeIdParamsSchema,
     body: {
@@ -237,7 +235,7 @@ registry.registerPath({
   responses: {
     [HttpStatus.OK]: {
       headers: { [requestIdHeader]: requestIdResponseHeader },
-      description: 'Canonical trade after amendment, cancellation, or reactivation',
+      description: 'Canonical trade after amendment or cancellation',
       content: {
         'application/json': {
           schema: tradeResponseSchema,
@@ -279,8 +277,8 @@ registry.registerPath({
   operationId: 'subscribeTradeEvents',
   summary: 'Subscribe to trade events',
   description: [
-    'Long-lived text/event-stream connection. The implemented named events are trade.created, trade.amended, trade.cancelled, and trade.reactivated.',
-    'Each data field contains one JSON Trade object (the TradeCreatedEventData, TradeAmendedEventData, TradeCancelledEventData, or TradeReactivatedEventData schema), not an event envelope or collection.',
+    'Long-lived text/event-stream connection. The implemented named events are trade.created, trade.amended, and trade.cancelled.',
+    'Each data field contains one JSON Trade object (the TradeCreatedEventData, TradeAmendedEventData, or TradeCancelledEventData schema), not an event envelope or collection.',
     'The payload is the canonical saved trade after database persistence and cache update; nullable book and counterparty fields remain present.',
     'The server sends retry: 3000 on connection to suggest a 3000 millisecond EventSource reconnect delay.',
     'Events are process-local and not durable. No event IDs are sent; Last-Event-ID replay is not supported.',
@@ -301,7 +299,6 @@ registry.registerPath({
             created: { value: createdEventExample },
             amended: { value: amendedEventExample },
             cancelled: { value: cancelledEventExample },
-            reactivated: { value: reactivatedEventExample },
           },
         },
       },
@@ -382,7 +379,7 @@ export const openApiDocument = new OpenApiGeneratorV31(registry.definitions).gen
     title: 'Fusion Platform Backend API',
     version: '1.0.0',
     description:
-      'Implemented backend routes only. Check readiness with GET /ready; create trades with POST /api/v1/trades; amend, cancel, or reactivate trades with PATCH /api/v1/trades/{tradeId}; retrieve the full snapshot with GET /api/v1/trades; and subscribe to trade.created, trade.amended, trade.cancelled, and trade.reactivated through GET /api/v1/events. X-Request-Id correlates each response with server logs.',
+      'Implemented backend routes only. Check readiness with GET /ready; create trades with POST /api/v1/trades; amend or cancel trades with PATCH /api/v1/trades/{tradeId}; retrieve the full snapshot with GET /api/v1/trades; and subscribe to trade.created, trade.amended, and trade.cancelled through GET /api/v1/events. X-Request-Id correlates each response with server logs.',
   },
   servers: [{ url: '/', description: 'The backend origin serving this document and Swagger UI' }],
 });

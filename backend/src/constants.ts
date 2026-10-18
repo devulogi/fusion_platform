@@ -30,7 +30,6 @@ export const TradeEventType = {
   CREATED: 'trade.created',
   AMENDED: 'trade.amended',
   CANCELLED: 'trade.cancelled',
-  REACTIVATED: 'trade.reactivated',
 } as const;
 
 export const ApiErrorCode = {

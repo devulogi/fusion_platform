@@ -2,12 +2,11 @@ import type { RequestHandler } from 'express';
 import { TradeService } from '../services/trade-service.ts';
 import { serializeTrade, serializeTradeCollection } from '../trade-serializer.ts';
 import { HttpStatus } from '../../../constants.ts';
-import { cancelTradeInputSchema, reactivateTradeInputSchema } from '../../../schemas.ts';
+import { cancelTradeInputSchema } from '../../../schemas.ts';
 import {
   parseAmendTradeInput,
   parseCancelTradeInput,
   parseCreateTradeInput,
-  parseReactivateTradeInput,
   parseTradeId,
 } from '../trade-input.ts';
 
@@ -43,15 +42,9 @@ export class TradeController {
     try {
       const tradeId = parseTradeId(request.params.tradeId);
       const cancellation = cancelTradeInputSchema.safeParse(request.body);
-      const reactivation = reactivateTradeInputSchema.safeParse(request.body);
       const trade = cancellation.success
         ? await this.tradeService.cancelTrade(tradeId, parseCancelTradeInput(request.body))
-        : reactivation.success
-          ? await this.tradeService.reactivateTrade(
-              tradeId,
-              parseReactivateTradeInput(request.body),
-            )
-          : await this.tradeService.amendTrade(tradeId, parseAmendTradeInput(request.body));
+        : await this.tradeService.amendTrade(tradeId, parseAmendTradeInput(request.body));
       response.status(HttpStatus.OK).json(serializeTrade(trade));
     } catch (error: unknown) {
       next(error);

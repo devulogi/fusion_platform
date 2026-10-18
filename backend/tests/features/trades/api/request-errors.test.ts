@@ -86,7 +86,6 @@ function setup() {
           create,
           amend: () => Promise.reject(new Error('Not used in request error tests')),
           cancel: () => Promise.reject(new Error('Not used in request error tests')),
-          reactivate: () => Promise.reject(new Error('Not used in request error tests')),
         },
         events,
       ),
