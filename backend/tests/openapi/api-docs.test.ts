@@ -61,7 +61,10 @@ describe('API documentation', () => {
           get: { operationId: 'listTrades' },
           post: { operationId: 'createTrade' },
         },
-        [`${ApiPath.trades}/{tradeId}`]: { patch: { operationId: 'amendTrade' } },
+        [`${ApiPath.trades}/{tradeId}`]: {
+          get: { operationId: 'getTradeById' },
+          patch: { operationId: 'amendOrCancelTrade' },
+        },
         [ApiPath.health]: { get: { operationId: 'checkLiveness' } },
         [ApiPath.tradeEvents]: { get: { operationId: 'subscribeTradeEvents' } },
       },
@@ -75,7 +78,8 @@ describe('API documentation', () => {
     expect(description).toContain('trade.amended');
     expect(description).toContain('trade.cancelled');
     expect(description).toContain('Last-Event-ID');
-    expect(description).toContain('not implemented');
+    expect(description).toContain('buffers events during each fetch');
+    expect(description).toContain('after each reconnection');
     expect(description).toContain('3000');
     expect(description).toContain('GET /api/v1/trades');
     const example = z
@@ -150,6 +154,18 @@ describe('API documentation', () => {
     expect(document.getIn(['paths', ApiPath.trades, 'get', 'responses', '200'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'get', 'responses', '503'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'get', 'responses', '500'])).toBeDefined();
+    expect(
+      document.getIn(['paths', `${ApiPath.trades}/{tradeId}`, 'get', 'parameters']),
+    ).toBeDefined();
+    expect(
+      document.getIn(['paths', `${ApiPath.trades}/{tradeId}`, 'get', 'responses', '200']),
+    ).toBeDefined();
+    expect(
+      document.getIn(['paths', `${ApiPath.trades}/{tradeId}`, 'get', 'responses', '400']),
+    ).toBeDefined();
+    expect(
+      document.getIn(['paths', `${ApiPath.trades}/{tradeId}`, 'get', 'responses', '404']),
+    ).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'post', 'requestBody'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'post', 'responses', '201'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'post', 'requestBody'])).toBeDefined();

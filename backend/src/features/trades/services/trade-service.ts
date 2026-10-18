@@ -2,6 +2,7 @@ import { TradeCache } from '../trade-cache.ts';
 import type { AmendTradeInput, CreateTradeInput, Trade } from '../models/trade.ts';
 import type { TradeRepositoryContract } from '../repositories/trade-repository.ts';
 import { TradeEventPublisher } from '../trade-event-publisher.ts';
+import { TradeNotFoundError } from '../trade-errors.ts';
 import {
   parseAmendTradeInput,
   parseCancelTradeInput,
@@ -21,6 +22,16 @@ export class TradeService {
 
   getAllTrades(): readonly Trade[] {
     return this.tradeCache.getAll();
+  }
+
+  getTradeById(id: unknown): Trade {
+    const validatedId = parseTradeId(id);
+    this.tradeCache.assertHydrated();
+    const trade = this.tradeCache.getById(validatedId);
+    if (!trade) {
+      throw new TradeNotFoundError(validatedId);
+    }
+    return trade;
   }
 
   async createTrade(input: CreateTradeInput): Promise<Trade> {

@@ -111,9 +111,107 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: 'get',
+  path: ApiPath.trades,
+  operationId: 'listTrades',
+  summary: 'List all trades',
+  description:
+    'Returns the complete hydrated process-local collection as { items }, without pagination, counts, or per-request database reads. Sorting and filtering are client-side.',
+  responses: {
+    [HttpStatus.OK]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Complete trade collection',
+      content: {
+        'application/json': {
+          schema: tradeCollectionResponseSchema,
+          example: { items: [tradeExample] },
+        },
+      },
+    },
+    [HttpStatus.SERVICE_UNAVAILABLE]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Trade collection is not ready',
+      content: {
+        'application/json': {
+          schema: tradeCollectionNotReadySchema,
+        },
+      },
+    },
+    [HttpStatus.INTERNAL_SERVER_ERROR]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Unexpected server error',
+      content: {
+        'application/json': {
+          schema: internalServerErrorSchema,
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: `${ApiPath.trades}/{tradeId}`,
+  operationId: 'getTradeById',
+  summary: 'Get trade by ID',
+  description: 'Returns the trade with the specified ID.',
+  request: {
+    params: z.object({ tradeId: z.string().min(1).max(32) }),
+  },
+  responses: {
+    [HttpStatus.OK]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Trade found',
+      content: {
+        'application/json': {
+          schema: tradeResponseSchema,
+          example: tradeExample,
+        },
+      },
+    },
+    [HttpStatus.NOT_FOUND]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Trade not found',
+      content: {
+        'application/json': {
+          schema: tradeNotFoundSchema,
+        },
+      },
+    },
+    [HttpStatus.BAD_REQUEST]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Trade ID validation failed',
+      content: {
+        'application/json': {
+          schema: validationErrorSchema,
+        },
+      },
+    },
+    [HttpStatus.SERVICE_UNAVAILABLE]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Trade collection is not ready',
+      content: {
+        'application/json': {
+          schema: tradeCollectionNotReadySchema,
+        },
+      },
+    },
+    [HttpStatus.INTERNAL_SERVER_ERROR]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Unexpected server error',
+      content: {
+        'application/json': {
+          schema: internalServerErrorSchema,
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
   method: 'patch',
   path: `${ApiPath.trades}/{tradeId}`,
-  operationId: 'amendTrade',
+  operationId: 'amendOrCancelTrade',
   summary: 'Amend or cancel a trade',
   description:
     'Accepts either editable amendment fields (excluding id and status) or the cancellation command { status: CANCELLED }. Amendments and cancellations are persisted before the cache is replaced and their typed event is published. Cancelled trades cannot be amended. Repeated cancellation returns the canonical cancelled trade without publishing a duplicate event.',
@@ -179,8 +277,8 @@ registry.registerPath({
     'The server sends retry: 3000 on connection to suggest a 3000 millisecond EventSource reconnect delay.',
     'Events are process-local and not durable. No event IDs are sent; Last-Event-ID replay is not supported.',
     'After reconnect, clients must reload GET /api/v1/trades to recover missed changes.',
-    'For a gap-free snapshot, clients should establish the stream first and reconcile events buffered during the collection fetch.',
-    'Automatic client recovery and snapshot reconciliation are not implemented in the current frontend.',
+    'The frontend establishes the stream before fetching the initial collection, buffers events during each fetch, and applies them over the returned snapshot.',
+    'EventSource reconnects automatically; after each reconnection, the frontend reloads GET /api/v1/trades to recover missed changes.',
     'Disconnecting removes the subscriber. Once streaming starts, failures cannot be returned as JSON error bodies.',
     'Swagger UI documents the stream but is not a live SSE event viewer; use EventSource or curl -N /api/v1/events on the backend origin.',
   ].join('\n\n'),
@@ -216,45 +314,6 @@ registry.registerPath({
       content: {
         'application/json': {
           schema: healthResponseSchema,
-        },
-      },
-    },
-    [HttpStatus.INTERNAL_SERVER_ERROR]: {
-      headers: { [requestIdHeader]: requestIdResponseHeader },
-      description: 'Unexpected server error',
-      content: {
-        'application/json': {
-          schema: internalServerErrorSchema,
-        },
-      },
-    },
-  },
-});
-
-registry.registerPath({
-  method: 'get',
-  path: ApiPath.trades,
-  operationId: 'listTrades',
-  summary: 'List all trades',
-  description:
-    'Returns the complete hydrated process-local collection as { items }, without pagination, counts, or per-request database reads. Sorting and filtering are client-side.',
-  responses: {
-    [HttpStatus.OK]: {
-      headers: { [requestIdHeader]: requestIdResponseHeader },
-      description: 'Complete trade collection',
-      content: {
-        'application/json': {
-          schema: tradeCollectionResponseSchema,
-          example: { items: [tradeExample] },
-        },
-      },
-    },
-    [HttpStatus.SERVICE_UNAVAILABLE]: {
-      headers: { [requestIdHeader]: requestIdResponseHeader },
-      description: 'Trade collection is not ready',
-      content: {
-        'application/json': {
-          schema: tradeCollectionNotReadySchema,
         },
       },
     },

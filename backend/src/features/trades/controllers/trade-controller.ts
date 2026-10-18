@@ -18,6 +18,16 @@ export class TradeController {
     response.status(HttpStatus.OK).json(serializeTradeCollection(trades));
   };
 
+  readonly getById: RequestHandler = (request, response, next) => {
+    try {
+      const tradeId = parseTradeId(request.params.tradeId);
+      const trade = this.tradeService.getTradeById(tradeId);
+      response.status(HttpStatus.OK).json(serializeTrade(trade));
+    } catch (error: unknown) {
+      next(error);
+    }
+  };
+
   readonly create: RequestHandler = async (request, response, next) => {
     try {
       const input = parseCreateTradeInput(request.body);

@@ -10,6 +10,7 @@ export function tradeRouter(controller: TradeController): Router {
 
   const router = Router();
   router.get('/', recordRequestRoute(ApiPath.trades), controller.getAll);
+  router.get('/:tradeId', recordRequestRoute(`${ApiPath.trades}/:tradeId`), controller.getById);
   router.post('/', ...tradeMiddlewarePipeline(ApiPath.trades), controller.create);
   router.patch(
     '/:tradeId',
