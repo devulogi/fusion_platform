@@ -10,6 +10,7 @@ export const HttpStatus = {
 
 export const ApiPath = {
   health: '/health',
+  readiness: '/ready',
   trades: '/api/v1/trades',
   tradeEvents: '/api/v1/events',
   apiDocs: '/api-docs',

@@ -52,7 +52,13 @@ describe('API documentation', () => {
     const document = parseDocument(response.text);
     const { paths } = z.object({ paths: z.record(z.unknown()) }).parse(document.toJS());
     expect(Object.keys(paths).sort()).toEqual(
-      [ApiPath.health, ApiPath.trades, ApiPath.tradeEvents, `${ApiPath.trades}/{tradeId}`].sort(),
+      [
+        ApiPath.health,
+        ApiPath.readiness,
+        ApiPath.trades,
+        ApiPath.tradeEvents,
+        `${ApiPath.trades}/{tradeId}`,
+      ].sort(),
     );
     expect(document.toJS()).toMatchObject({
       servers: [{ url: '/' }],
@@ -66,10 +72,10 @@ describe('API documentation', () => {
           patch: { operationId: 'amendOrCancelTrade' },
         },
         [ApiPath.health]: { get: { operationId: 'checkLiveness' } },
+        [ApiPath.readiness]: { get: { operationId: 'checkReadiness' } },
         [ApiPath.tradeEvents]: { get: { operationId: 'subscribeTradeEvents' } },
       },
     });
-    expect(document.getIn(['paths', '/ready'])).toBeUndefined();
 
     const description = z
       .string()
@@ -151,6 +157,9 @@ describe('API documentation', () => {
     expect(document.getIn(['openapi'])).toBe('3.1.0');
     expect(document.getIn(['paths', '/health', 'get', 'responses', '200'])).toBeDefined();
     expect(document.getIn(['paths', '/health', 'get', 'responses', '500'])).toBeDefined();
+    expect(document.getIn(['paths', ApiPath.readiness, 'get', 'responses', '200'])).toBeDefined();
+    expect(document.getIn(['paths', ApiPath.readiness, 'get', 'responses', '503'])).toBeDefined();
+    expect(document.getIn(['paths', ApiPath.readiness, 'get', 'responses', '500'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'get', 'responses', '200'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'get', 'responses', '503'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'get', 'responses', '500'])).toBeDefined();

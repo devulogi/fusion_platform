@@ -30,6 +30,7 @@ export function createApp({
 
   app.use(requestContext(logger));
   app.get(ApiPath.health, healthController.getHealth);
+  app.get(ApiPath.readiness, healthController.getReadiness);
   app.use(ApiPath.apiDocs, apiDocsRouter);
   app.use(ApiPath.trades, tradeRouter(tradeController));
   app.use(ApiPath.tradeEvents, tradeEventsRouter(tradeEventsController));

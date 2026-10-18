@@ -16,7 +16,16 @@ const tradeEventPublisher = new TradeEventPublisher();
 const tradeService = new TradeService(tradeCache, tradeRepository, tradeEventPublisher);
 const tradeController = new TradeController(tradeService);
 const tradeEventsController = new TradeEventsController(tradeEventPublisher);
-const healthController = new HealthController();
+const healthController = new HealthController(async () => {
+  if (!tradeCache.isHydrated()) return false;
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return true;
+  } catch {
+    return false;
+  }
+});
 const app = createApp({ healthController, tradeController, tradeEventsController });
 
 async function start(): Promise<void> {
