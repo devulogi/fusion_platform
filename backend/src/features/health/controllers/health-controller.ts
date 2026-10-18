@@ -1,19 +1,8 @@
 import type { RequestHandler } from 'express';
-import { z } from '../../../http/openapi/zod.ts';
-import { HttpStatus } from '../../../http/constants.ts';
-import { ServiceNotReadyError } from '../../../http/api-errors.ts';
-
-export const healthResponseSchema = z
-  .object({
-    status: z.literal('ok'),
-  })
-  .openapi('HealthResponse');
-
-export const readinessResponseSchema = z
-  .object({ status: z.literal('ready') })
-  .openapi('ReadinessResponse');
-
-export type ReadinessCheck = () => Promise<boolean>;
+import { HttpStatus } from '../../../constants.ts';
+import { ServiceNotReadyError } from '../../../errors.ts';
+import { healthResponseSchema, readinessResponseSchema } from '../../../schemas.ts';
+import type { ReadinessCheck } from '../../../types.ts';
 
 export class HealthController {
   constructor(private readonly readinessCheck: ReadinessCheck = () => Promise.resolve(false)) {}

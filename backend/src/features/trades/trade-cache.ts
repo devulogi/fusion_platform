@@ -1,11 +1,5 @@
-import type { Trade, TradeId } from './models/trade.ts';
-
-export class TradeCacheNotHydratedError extends Error {
-  constructor() {
-    super('Trade cache has not been hydrated');
-    this.name = 'TradeCacheNotHydratedError';
-  }
-}
+import type { Trade, TradeId } from '../../types.ts';
+import { TradeCacheNotHydratedError } from '../../errors.ts';
 
 export class TradeCache {
   private tradesById = new Map<TradeId, Trade>();

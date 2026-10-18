@@ -1,12 +1,17 @@
 import { TradeCache } from '../trade-cache.ts';
-import type { AmendTradeInput, CreateTradeInput, Trade } from '../models/trade.ts';
-import type { TradeRepositoryContract } from '../repositories/trade-repository.ts';
+import { TradeNotFoundError } from '../../../errors.ts';
+import type {
+  AmendTradeInput,
+  CreateTradeInput,
+  Trade,
+  TradeRepositoryContract,
+} from '../../../types.ts';
 import { TradeEventPublisher } from '../trade-event-publisher.ts';
-import { TradeNotFoundError } from '../trade-errors.ts';
 import {
   parseAmendTradeInput,
   parseCancelTradeInput,
   parseCreateTradeInput,
+  parseReactivateTradeInput,
   parseTradeId,
 } from '../trade-input.ts';
 
@@ -16,7 +21,10 @@ export class TradeService {
     private readonly tradeRepository: TradeRepositoryContract,
     private readonly tradeEventPublisher: Pick<
       TradeEventPublisher,
-      'publishTradeCreated' | 'publishTradeAmended' | 'publishTradeCancelled'
+      | 'publishTradeCreated'
+      | 'publishTradeAmended'
+      | 'publishTradeCancelled'
+      | 'publishTradeReactivated'
     >,
   ) {}
 
@@ -61,6 +69,18 @@ export class TradeService {
     this.tradeCache.replace(result.trade);
     if (result.changed) {
       this.tradeEventPublisher.publishTradeCancelled(result.trade);
+    }
+    return result.trade;
+  }
+
+  async reactivateTrade(id: unknown, input: unknown): Promise<Trade> {
+    const validatedId = parseTradeId(id);
+    parseReactivateTradeInput(input);
+    this.tradeCache.assertHydrated();
+    const result = await this.tradeRepository.reactivate(validatedId);
+    this.tradeCache.replace(result.trade);
+    if (result.changed) {
+      this.tradeEventPublisher.publishTradeReactivated(result.trade);
     }
     return result.trade;
   }

@@ -1,7 +1,7 @@
 import { get, type IncomingMessage } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../../src/app.ts';
-import { ApiPath } from '../../../../src/http/constants.ts';
+import { ApiPath } from '../../../../src/constants.ts';
 import { HealthController } from '../../../../src/features/health/controllers/health-controller.ts';
 import { TradeController } from '../../../../src/features/trades/controllers/trade-controller.ts';
 import { TradeEventsController } from '../../../../src/features/trades/controllers/trade-events-controller.ts';
@@ -9,10 +9,10 @@ import { TradeCache } from '../../../../src/features/trades/trade-cache.ts';
 import { TradeRepository } from '../../../../src/features/trades/repositories/trade-repository.ts';
 import { TradeEventPublisher } from '../../../../src/features/trades/trade-event-publisher.ts';
 import { TradeService } from '../../../../src/features/trades/services/trade-service.ts';
-import { serializeTrade } from '../../../../src/features/trades/serializers/trade-serializer.ts';
+import { serializeTrade } from '../../../../src/features/trades/trade-serializer.ts';
 
 describe('GET /api/v1/events', () => {
-  it('streams canonical created, amended, and cancelled trade events', async () => {
+  it('streams canonical created, amended, cancelled, and reactivated trade events', async () => {
     const tradeCache = new TradeCache();
     tradeCache.hydrate([]);
     const tradeEventPublisher = new TradeEventPublisher();
@@ -68,12 +68,13 @@ describe('GET /api/v1/events', () => {
       streamResponse = await responsePromise;
       expect(streamResponse.statusCode).toBe(200);
       expect(streamResponse.headers['content-type']).toContain('text/event-stream');
+      expect(streamResponse.headers['content-encoding']).toBeUndefined();
 
       const eventTextPromise = new Promise<string>((resolve) => {
         let eventText = '';
         streamResponse?.on('data', (chunk: Buffer | string) => {
           eventText += chunk.toString();
-          if (eventText.includes('event: trade.cancelled')) {
+          if (eventText.includes('event: trade.reactivated')) {
             resolve(eventText);
           }
         });
@@ -92,6 +93,7 @@ describe('GET /api/v1/events', () => {
       tradeEventPublisher.publishTradeCreated(trade);
       tradeEventPublisher.publishTradeAmended({ ...trade, symbol: 'MSFT' });
       tradeEventPublisher.publishTradeCancelled({ ...trade, status: 'CANCELLED' });
+      tradeEventPublisher.publishTradeReactivated(trade);
 
       const eventText = await eventTextPromise;
       expect(eventText).toContain('event: trade.created\n');
@@ -104,6 +106,8 @@ describe('GET /api/v1/events', () => {
       expect(eventText).toContain(
         `data: ${JSON.stringify(serializeTrade({ ...trade, status: 'CANCELLED' }))}`,
       );
+      expect(eventText).toContain('event: trade.reactivated\n');
+      expect(eventText).toContain(`data: ${JSON.stringify(serializeTrade(trade))}`);
 
       streamResponse.destroy();
       await subscriberRemoved;

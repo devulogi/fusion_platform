@@ -1,14 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { TradeRepository } from '../../../../src/features/trades/repositories/trade-repository.ts';
-import {
-  TradeNotAmendableError,
-  TradeNotFoundError,
-} from '../../../../src/features/trades/trade-errors.ts';
-import type {
-  PersistedTrade,
-  TradeWriteDatabase,
-} from '../../../../src/features/trades/repositories/trade-repository.ts';
+import { TradeNotAmendableError, TradeNotFoundError } from '../../../../src/errors.ts';
+import type { PersistedTrade, TradeWriteDatabase } from '../../../../src/types.ts';
 
 const persistedTrade: PersistedTrade = {
   id: 'trade-1',
@@ -305,5 +299,80 @@ describe('TradeRepository', () => {
     });
 
     await expect(repository.cancel('missing-trade')).rejects.toBeInstanceOf(TradeNotFoundError);
+  });
+
+  it('conditionally reactivates a cancelled trade and returns the canonical row', async () => {
+    const cancelledTrade: PersistedTrade = { ...persistedTrade, status: 'CANCELLED' };
+    const reactivatedTrade: PersistedTrade = { ...cancelledTrade, status: 'ACTIVE' };
+    const update = vi
+      .fn<TradeWriteDatabase['trade']['update']>()
+      .mockResolvedValue(reactivatedTrade);
+    const repository = new TradeRepository({
+      trade: {
+        findMany: vi.fn<TradeWriteDatabase['trade']['findMany']>().mockResolvedValue([]),
+        findUnique: vi.fn<TradeWriteDatabase['trade']['findUnique']>().mockResolvedValue(null),
+        create: vi.fn<TradeWriteDatabase['trade']['create']>(),
+        update,
+      },
+    });
+
+    await expect(repository.reactivate('trade-1')).resolves.toEqual({
+      trade: {
+        id: 'trade-1',
+        symbol: 'AAPL',
+        quantity: 100,
+        price: 185.25,
+        side: 'BUY',
+        trader: 'Alex Morgan',
+        tradeDate: '2026-10-14T12:00:00.000Z',
+        status: 'ACTIVE',
+      },
+      changed: true,
+    });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'trade-1', status: 'CANCELLED' },
+      data: { status: 'ACTIVE' },
+    });
+  });
+
+  it('returns an already active trade without marking it changed', async () => {
+    const updateError = new Prisma.PrismaClientKnownRequestError('Record not found', {
+      code: 'P2025',
+      clientVersion: 'test',
+    });
+    const findUnique = vi
+      .fn<TradeWriteDatabase['trade']['findUnique']>()
+      .mockResolvedValue(persistedTrade);
+    const repository = new TradeRepository({
+      trade: {
+        findMany: vi.fn<TradeWriteDatabase['trade']['findMany']>().mockResolvedValue([]),
+        findUnique,
+        create: vi.fn<TradeWriteDatabase['trade']['create']>(),
+        update: vi.fn<TradeWriteDatabase['trade']['update']>().mockRejectedValue(updateError),
+      },
+    });
+
+    await expect(repository.reactivate('trade-1')).resolves.toMatchObject({
+      changed: false,
+      trade: { id: 'trade-1', status: 'ACTIVE' },
+    });
+    expect(findUnique).toHaveBeenCalledWith({ where: { id: 'trade-1' } });
+  });
+
+  it('maps a missing row after a conditional reactivation failure to not found', async () => {
+    const updateError = new Prisma.PrismaClientKnownRequestError('Record not found', {
+      code: 'P2025',
+      clientVersion: 'test',
+    });
+    const repository = new TradeRepository({
+      trade: {
+        findMany: vi.fn<TradeWriteDatabase['trade']['findMany']>().mockResolvedValue([]),
+        findUnique: vi.fn<TradeWriteDatabase['trade']['findUnique']>().mockResolvedValue(null),
+        create: vi.fn<TradeWriteDatabase['trade']['create']>(),
+        update: vi.fn<TradeWriteDatabase['trade']['update']>().mockRejectedValue(updateError),
+      },
+    });
+
+    await expect(repository.reactivate('missing-trade')).rejects.toBeInstanceOf(TradeNotFoundError);
   });
 });
