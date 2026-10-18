@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
@@ -153,6 +153,26 @@ describe('App', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Live');
   });
 
+  it('returns to Live when the event stream reconnects without a page reload', async () => {
+    const fetchMock = installFetchMock();
+    fetchMock.mockResolvedValue(jsonResponse({ items: [activeTrade] }));
+    renderApp();
+    const eventSource = MockEventSource.instances[0];
+    if (eventSource === undefined) throw new Error('Expected an EventSource connection');
+
+    act(() => eventSource.open());
+    expect(await screen.findByRole('cell', { name: 'AAPL' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Live');
+
+    act(() => eventSource.onerror?.());
+    expect(screen.getByRole('status')).toHaveTextContent('Reconnecting');
+
+    act(() => eventSource.open());
+
+    expect(screen.getByRole('status')).toHaveTextContent('Live');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('refreshes the snapshot on demand and shows the latest trades', async () => {
     const fetchMock = installFetchMock();
     const refreshedSnapshot = deferred<Response>();
@@ -229,5 +249,111 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
     expect(await screen.findByText('Recovered view')).toBeInTheDocument();
+  });
+
+  it('creates a trade through REST and displays the canonical response', async () => {
+    const fetchMock = installFetchMock();
+    const createdTrade = { ...activeTrade, id: 'trade-created', symbol: 'MSFT' };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ items: [activeTrade] }))
+      .mockResolvedValueOnce(jsonResponse(createdTrade));
+    renderApp();
+    const eventSource = MockEventSource.instances[0];
+    if (eventSource === undefined) throw new Error('Expected an EventSource connection');
+    eventSource.open();
+    expect(await screen.findByRole('cell', { name: 'AAPL' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'New trade' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Symbol' }), {
+      target: { value: 'MSFT' },
+    });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Quantity' }), {
+      target: { value: '10' },
+    });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Price' }), {
+      target: { value: '100' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Side' }), {
+      target: { value: 'BUY' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Trader' }), {
+      target: { value: 'Alex' },
+    });
+    fireEvent.change(screen.getByLabelText('Trade date and time'), {
+      target: { value: '2026-10-18T12:00' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), {
+      target: { value: 'ACTIVE' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create trade' }));
+
+    expect(await screen.findByRole('cell', { name: 'trade-created' })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/trades',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('amends a selected trade and displays the canonical response', async () => {
+    const fetchMock = installFetchMock();
+    const amendedTrade = { ...activeTrade, symbol: 'MSFT' };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ items: [activeTrade] }))
+      .mockResolvedValueOnce(jsonResponse(amendedTrade));
+    renderApp();
+    const eventSource = MockEventSource.instances[0];
+    if (eventSource === undefined) throw new Error('Expected an EventSource connection');
+    eventSource.open();
+    const row = await screen.findByRole('row', { name: /trade-1/ });
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Amend trade-1' }));
+    fireEvent.change(screen.getByLabelText('Symbol'), { target: { value: 'MSFT' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByRole('cell', { name: 'MSFT' })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/trades/trade-1',
+      expect.objectContaining({ method: 'PATCH' }),
+    );
+    const amendmentRequest = fetchMock.mock.calls[1]?.[1];
+    const amendmentRequestBody = amendmentRequest?.body;
+    if (typeof amendmentRequestBody !== 'string') throw new Error('Missing amendment request body');
+    const amendmentBody: unknown = JSON.parse(amendmentRequestBody);
+    expect(amendmentBody).not.toHaveProperty('id');
+    expect(amendmentBody).not.toHaveProperty('status');
+  });
+
+  it('cancels a selected trade and retains it with cancelled status', async () => {
+    const fetchMock = installFetchMock();
+    const cancelledTrade = { ...activeTrade, status: 'CANCELLED' as const };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ items: [activeTrade] }))
+      .mockResolvedValueOnce(jsonResponse(cancelledTrade));
+    renderApp();
+    const eventSource = MockEventSource.instances[0];
+    if (eventSource === undefined) throw new Error('Expected an EventSource connection');
+    eventSource.open();
+    const row = await screen.findByRole('row', { name: /trade-1/ });
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Cancel trade-1' }));
+    expect(screen.getByRole('dialog', { name: 'Cancel trade?' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }));
+
+    expect(await screen.findByText('Cancelled')).toBeInTheDocument();
+    expect(screen.getByRole('row', { name: /trade-1/ })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/trades/trade-1',
+      expect.objectContaining({ method: 'PATCH' }),
+    );
+    const cancellationRequest = fetchMock.mock.calls[1]?.[1];
+    const cancellationRequestBody = cancellationRequest?.body;
+    if (typeof cancellationRequestBody !== 'string') {
+      throw new Error('Missing cancellation request body');
+    }
+    const cancellationBody: unknown = JSON.parse(cancellationRequestBody);
+    expect(cancellationBody).toEqual({ status: 'CANCELLED' });
   });
 });

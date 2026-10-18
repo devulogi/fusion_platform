@@ -34,7 +34,7 @@ As a blotter user, I want to see persisted trades in a readable table so I can r
 - Loading, empty, and snapshot-error states are communicated clearly without exposing internal errors.
 - The layout remains usable at narrow viewport widths; essential information and row actions are not silently lost.
 
-**Implementation:** The page fetches and displays the collection after the SSE connection opens. A feature-local TanStack Table component displays all required trade fields and optional book/counterparty values, uses layout-matching loading skeletons, and presents empty and snapshot-error states. On narrow viewports the table scrolls within its wrapper without widening the page. Create, amend, and cancel actions remain unimplemented in their separate stories.
+**Implementation:** The page fetches and displays the collection after the SSE connection opens. A feature-local TanStack Table component displays all required trade fields and optional book/counterparty values, uses layout-matching loading skeletons, and presents empty and snapshot-error states. On narrow viewports the table scrolls within its wrapper without widening the page. Row actions open the validated amend form and cancellation confirmation; the header action opens the create form.
 
 ### 2. Sort, filter, and refresh trades
 
@@ -54,7 +54,7 @@ As a blotter user, I want to sort, filter, and refresh the collection so I can f
 
 ### 3. Create a trade
 
-**Status:** Proposed
+**Status:** Implemented
 
 As a trader, I want to create a trade so it is persisted and appears in the blotter and live updates.
 
@@ -66,9 +66,11 @@ As a trader, I want to create a trade so it is persisted and appears in the blot
 - On success, close/reset the form and update the TanStack Query cache from the canonical response. A matching SSE event must not create a duplicate row.
 - On failure, keep the form recoverable and show a safe, actionable message.
 
+**Implementation:** The blotter's New trade action opens a validated dialog. Required fields, including status, are explicit; optional book and counterparty are supported. The form submits through REST, disables duplicate submission while pending, updates the Query cache from the saved response, and preserves the draft with a safe message on failure. RTL covers validation, payload shape, pending state, and recovery.
+
 ### 4. Amend a trade
 
-**Status:** Proposed
+**Status:** Implemented
 
 As a trader, I want to amend an active trade so corrected details are persisted and visible in the blotter.
 
@@ -81,9 +83,11 @@ As a trader, I want to amend an active trade so corrected details are persisted 
 - On success, update the query cache from the canonical trade response; the corresponding SSE event upserts the same trade.
 - Show safe feedback for not-found, not-amendable, validation, and unexpected errors. Do not expose raw server details.
 
+**Implementation:** Active rows expose an amend action that opens a prepopulated dialog. It submits only editable fields to the existing PATCH endpoint, updates the Query cache from the canonical response, and leaves the draft available after safe error feedback. RTL verifies prepopulation, validation, payload exclusions, pending state, and failure recovery.
+
 ### 5. Cancel a trade
 
-**Status:** Proposed
+**Status:** Implemented
 
 As a trader, I want to cancel an active trade without deleting it so its status remains visible to the blotter.
 
@@ -93,6 +97,9 @@ As a trader, I want to cancel an active trade without deleting it so its status 
 - Submit the assessment's cancellation command `{ "status": "CANCELLED" }` to `PATCH /api/v1/trades/{tradeId}`.
 - On success, retain the row and update its status from the canonical response; the matching SSE event must not duplicate it.
 - Prevent duplicate submission while pending and show safe feedback when cancellation fails.
+- A cancelled trade has no row-level action to directly return it to `ACTIVE`; the frontend must not send `{ "status": "ACTIVE" }` as an undo command.
+
+**Implementation:** Active rows expose a confirmation dialog that states cancellation will not delete the trade. Confirm sends `{ "status": "CANCELLED" }` through PATCH; the canonical response updates the Query cache and the matching SSE event upserts the same row. Cancelled rows expose no actions. Pending state prevents duplicate confirmation; errors retain a retry path. RTL covers confirmation content, payload, pending state, success close, and failure recovery.
 
 ### 6. Receive live trade updates
 
