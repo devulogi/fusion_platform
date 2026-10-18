@@ -1,12 +1,16 @@
 import { OpenAPIRegistry, OpenApiGeneratorV31 } from '@asteasolutions/zod-to-openapi';
 import {
   internalServerErrorSchema,
+  serviceNotReadySchema,
   tradeCollectionNotReadySchema,
   tradeNotAmendableSchema,
   tradeNotFoundSchema,
   validationErrorSchema,
 } from '../api-errors.ts';
-import { healthResponseSchema } from '../../features/health/controllers/health-controller.ts';
+import {
+  healthResponseSchema,
+  readinessResponseSchema,
+} from '../../features/health/controllers/health-controller.ts';
 import {
   tradeCollectionResponseSchema,
   tradeResponseSchema,
@@ -314,6 +318,44 @@ registry.registerPath({
       content: {
         'application/json': {
           schema: healthResponseSchema,
+        },
+      },
+    },
+    [HttpStatus.INTERNAL_SERVER_ERROR]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Unexpected server error',
+      content: {
+        'application/json': {
+          schema: internalServerErrorSchema,
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: ApiPath.readiness,
+  operationId: 'checkReadiness',
+  summary: 'Check backend readiness',
+  description:
+    'Reports ready only when PostgreSQL is reachable and the initial trade cache hydration has completed. A 503 response means the backend should not receive dependent traffic yet.',
+  responses: {
+    [HttpStatus.OK]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Backend and trade cache are ready',
+      content: {
+        'application/json': {
+          schema: readinessResponseSchema,
+        },
+      },
+    },
+    [HttpStatus.SERVICE_UNAVAILABLE]: {
+      headers: { [requestIdHeader]: requestIdResponseHeader },
+      description: 'Backend dependencies are not ready',
+      content: {
+        'application/json': {
+          schema: serviceNotReadySchema,
         },
       },
     },

@@ -3,6 +3,7 @@ import { z } from './openapi/zod.ts';
 export const tradeCollectionNotReadyMessage = 'Trade collection is not ready';
 export const tradeNotFoundMessage = 'Trade not found';
 export const tradeNotAmendableMessage = 'Only active trades can be amended';
+export const serviceNotReadyMessage = 'Backend dependencies are not ready';
 export const validationFailedMessage = 'The provided payload failed data validation rules.';
 export const internalServerErrorMessage = 'Internal server error';
 
@@ -10,6 +11,13 @@ export class RouteNotFoundError extends Error {
   constructor() {
     super('Endpoint not found');
     this.name = 'RouteNotFoundError';
+  }
+}
+
+export class ServiceNotReadyError extends Error {
+  constructor() {
+    super(serviceNotReadyMessage);
+    this.name = 'ServiceNotReadyError';
   }
 }
 
@@ -29,6 +37,16 @@ export const tradeCollectionNotReadySchema = z
     }),
   })
   .openapi('TradeCollectionNotReadyError');
+
+export const serviceNotReadySchema = z
+  .object({
+    error: z.object({
+      code: z.literal('SERVICE_NOT_READY'),
+      reason: z.literal(serviceNotReadyMessage),
+      requestId: z.string().uuid(),
+    }),
+  })
+  .openapi('ServiceNotReadyError');
 
 export const tradeNotFoundSchema = z
   .object({

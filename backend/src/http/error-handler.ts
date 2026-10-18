@@ -4,6 +4,8 @@ import { TradeCacheNotHydratedError } from '../features/trades/trade-cache.ts';
 import {
   internalServerErrorMessage,
   internalServerErrorSchema,
+  serviceNotReadyMessage,
+  serviceNotReadySchema,
   tradeCollectionNotReadyMessage,
   tradeCollectionNotReadySchema,
   tradeNotAmendableMessage,
@@ -13,6 +15,7 @@ import {
   validationErrorSchema,
   validationFailedMessage,
   RouteNotFoundError,
+  ServiceNotReadyError,
   routeNotFoundSchema,
 } from './api-errors.ts';
 import { HttpStatus } from './constants.ts';
@@ -76,6 +79,16 @@ export function createErrorHandler(
           error: {
             code: 'ROUTE_NOT_FOUND',
             reason: 'Endpoint not found',
+            requestId,
+          },
+        }),
+      );
+    } else if (error instanceof ServiceNotReadyError) {
+      response.status(HttpStatus.SERVICE_UNAVAILABLE).json(
+        serviceNotReadySchema.parse({
+          error: {
+            code: 'SERVICE_NOT_READY',
+            reason: serviceNotReadyMessage,
             requestId,
           },
         }),

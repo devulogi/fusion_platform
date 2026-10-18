@@ -43,6 +43,10 @@ export class TradeCache {
     return trade ? { ...trade } : undefined;
   }
 
+  isHydrated(): boolean {
+    return this.hydrated;
+  }
+
   assertHydrated(): void {
     if (!this.hydrated) {
       throw new TradeCacheNotHydratedError();
