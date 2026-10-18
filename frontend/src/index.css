@@ -3,9 +3,19 @@
 @tailwind utilities;
 
 :root {
-  font-family: Georgia, 'Times New Roman', serif;
-  color: #1c2420;
-  background: #f5f7f4;
+  --trade-canvas: #e7e9f6;
+  --trade-surface: #f7f8fb;
+  --trade-border: #cbd0dc;
+  --trade-text: #20232b;
+  --trade-muted: #626a78;
+  --trade-accent: #3048cc;
+  --trade-active-bg: #dff3e8;
+  --trade-active-text: #267a52;
+  --trade-cancelled-bg: #f8dfe1;
+  --trade-cancelled-text: #ae3b49;
+  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+  color: var(--trade-text);
+  background: var(--trade-canvas);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;

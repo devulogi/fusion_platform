@@ -15,7 +15,7 @@ These stories translate the full-stack take-home assessment into frontend workfl
 - TanStack Query owns server state for the trade snapshot. React Context is reserved for client state genuinely shared across components, such as SSE connection status. Component-local state owns form drafts and transient UI state.
 - REST responses are authoritative for the initiating action; SSE delivers committed changes to other connected clients. Applying the same trade from both paths must upsert by trade ID rather than create duplicates.
 - The assessment's required core model is `id`, `symbol`, `quantity`, `price`, `side`, `trader`, `tradeTimestamp`, and `status`. The sample's `book` and `counterparty` fields may also be shown when present.
-- Backend reactivation support exists, but reactivation is not required by the supplied assessment. Do not add a reactivation control unless explicitly approved.
+- Cancellation is terminal in the backend contract. Do not send `{ "status": "ACTIVE" }` to undo cancellation or expose a direct Reactivate action.
 - Storybook is configured for reusable component exploration. MSW and Playwright are not configured; request approval before adding their dependencies or project setup.
 
 ## Stories
@@ -45,12 +45,13 @@ As a blotter user, I want to sort, filter, and refresh the collection so I can f
 **Acceptance criteria**
 
 - Users can sort the table by supported columns with a visible sort direction.
-- Users can apply and clear basic filters for symbol, trader, and status.
+- Users can search by symbol and open the Filters dialog for trader, date range, side, and status criteria.
+- Users can reset all filter drafts, cancel without applying, and see how many criteria are active.
 - A refresh action refetches the collection through TanStack Query and presents pending/error feedback without losing the last successful snapshot.
 - Sorting and filtering are client-side for the assessment-sized collection; they do not change the server contract or add pagination.
 - Sorting/filtering controls work by keyboard and expose their state accessibly.
 
-**Implementation:** TanStack Table sorts supported columns and filters client-side by symbol, trader, and status. The clear action resets all filters. A refresh button refetches through TanStack Query, displays pending/error feedback, remains available during SSE reconnects after the first snapshot, and retains the last successful data if refresh fails.
+**Implementation:** TanStack Table sorts supported columns. Symbol search applies immediately; trader/date/side/status filters are edited in a dialog and applied client-side, without changing the backend contract. Apply commits the draft, Cancel discards it, and Reset all clears it. A refresh button refetches through TanStack Query, displays pending/error feedback, remains available during SSE reconnects after the first snapshot, and retains the last successful data if refresh fails.
 
 ### 3. Create a trade
 
@@ -110,15 +111,42 @@ As a connected blotter user, I want committed changes from other clients to appe
 **Acceptance criteria**
 
 - Connect to `GET /api/v1/events` using native `EventSource` and show the connection state accessibly.
-- Handle `trade.created`, `trade.amended`, `trade.cancelled`, and `trade.reactivated` payloads as untrusted input; ignore malformed events.
+- Handle `trade.created`, `trade.amended`, and `trade.cancelled` payloads as untrusted input; ignore malformed events.
 - Upsert valid trades into the TanStack Query cache by ID. Events arriving during a snapshot fetch are buffered and reconciled over the snapshot.
 - Close the stream when the app unmounts. After automatic reconnect, refetch the snapshot because this backend has no durable event replay or event IDs.
 - Connection loss/recovery is visible without blocking access to the last successful snapshot.
 
-## Cross-cutting quality criteria
+### 7. Adopt the supplied Trade History visual design
 
-- Use React Testing Library for accessible, user-observable component behavior. Use Storybook stories for reusable component states and visual variants; use MSW for mocked API responses only when approved and configured. Reserve Playwright for a small number of critical end-to-end user journeys when configured.
-- Use an app-level error boundary for unexpected render failures. Its fallback is accessible and safe, supports retry/reset and reload, and does not display raw error details.
-- Keep trade data in TanStack Query rather than duplicating it in Context. Use Context only for shared client state; keep drafts and transient presentation state local.
-- Preserve the shared frontend interaction, motion, focus, loading, touch-target, and form conventions in `.github/instructions/frontend.instructions.md`.
-- Do not add optional features outside these stories without explicit approval.
+**Status:** Implemented
+
+As a blotter user, I want the existing assessment workflows to use the supplied TradeLog visual direction while retaining their current behavior and API contracts.
+
+**Design direction:** Use a pale lavender application canvas (`#e7e9f6`) around a white/off-white work surface (`#f7f8fb`). Use cool gray borders (`#cbd0dc`), near-black text (`#20232b`), muted secondary text (`#626a78`), and saturated indigo-blue actions/selection (`#3048cc`). Status uses a pale green badge with green indicator for Active (`#dff3e8` / `#31966a`) and a pale red badge with red indicator for Cancelled (`#f8dfe1` / `#d25360`). These are starting estimates from the supplied raster; prefer exact design tokens if provided later. Use compact neutral sans-serif typography, thin separators, restrained radii, and no shadows beyond the contained application surface. The mock browser chrome in the reference is presentation framing, not an in-app component.
+
+**Acceptance criteria**
+
+- Apply the reference palette and compact visual hierarchy to the existing Trade History screen, including loading, empty, error, and dialog states.
+- Keep the current assessment actions and refresh behavior. Do not add navigation destinations or controls without an implemented workflow.
+- Keep symbol search inline; put trader, inclusive local-date range, side, and status criteria in the Filters dialog. Show the number of active criteria.
+- Apply commits the filter draft; Cancel and Escape discard it; Reset all clears symbol search and advanced filters.
+- Use the reference columns: selection checkbox, composite Trade (symbol/side with trader secondary), Date & Time, Quantity, Price, Status, and Actions. Do not display Trade ID, Book, or Counterparty as columns.
+- Keep create/amend/cancel and refresh workflows. Active trades expose Amend and Cancel through the dedicated Actions menu; cancelled trades have no actions. Status is text-labelled and not communicated by color alone.
+- Row checkboxes select locally only; do not invent bulk actions. Do not add CSV export, side tabs, or pagination.
+- Use only fields supplied by the API. Do not present `counterparty` as issuer/company metadata.
+
+**Components and Storybook work**
+
+- `TradeStatusBadge`: reusable Active/Cancelled variants. Stories cover both variants; RTL verifies visible labels and semantic styling.
+- `TradeFilterToolbar`: symbol search plus a staged Filter Trades dialog with manual date range, side/status checkboxes, trader, Reset all, Cancel, and Apply Filters. Stories cover closed, open, and active-filter states; RTL verifies manual dates, draft/apply/cancel/reset, keyboard close/focus, and accessible controls.
+- `TradeRowActions`: three-dot row menu for Amend and Cancel trade. Stories cover collapsed, open, and disabled states; RTL verifies callbacks, Escape/outside dismissal, focus restoration, and disabled behavior.
+- `TradeBlotterTable`: reference columns, local row selection, sortable composite Trade cell, dedicated Actions column, status badge, and loading/empty states. Stories cover populated, loading, and empty; RTL covers sorting, selection, filtering, and row-action integration.
+- Existing create, amend, and cancel dialogs retain their validated REST workflows and receive the reference palette.
+
+**Tests and validation**
+
+- Keep stories colocated with components in `frontend/src/`; use deterministic fixtures and no live API calls.
+- Use the Storybook accessibility addon and RTL for component states and user-observable interactions. Do not add screenshot infrastructure or MSW without approval.
+- Preserve REST/SSE contracts. Run focused tests during component development, then the frontend suite, lint, application build, Storybook build, and browser checks.
+
+## Cross-cutting quality criteria

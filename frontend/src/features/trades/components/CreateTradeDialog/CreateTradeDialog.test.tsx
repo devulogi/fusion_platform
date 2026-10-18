@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import CreateTradeDialog from './create-trade-dialog';
-import type { CreateTradeInput } from './create-trade-dialog';
+import CreateTradeDialog from './index';
+import type { CreateTradeInput } from './index';
 
 afterEach(cleanup);
 

@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
-import { AppErrorBoundary } from './components/app-error-boundary';
+import { AppErrorBoundary } from './app-error-boundary';
 import { ConnectionStatusProvider } from './contexts/connection-status-provider';
 
 type TestTrade = {
@@ -135,8 +135,8 @@ describe('App', () => {
     eventSource.dispatchTrade('trade.amended', { ...activeTrade, symbol: 'MSFT' });
     snapshot.resolve(jsonResponse({ items: [activeTrade] }));
 
-    expect(await screen.findByRole('cell', { name: 'MSFT' })).toBeInTheDocument();
-    expect(screen.queryByRole('cell', { name: 'AAPL' })).not.toBeInTheDocument();
+    expect(await screen.findByText('MSFT', { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText('AAPL', { exact: true })).not.toBeInTheDocument();
   });
 
   it('reloads the snapshot after reconnect and reconciles events during that fetch', async () => {
@@ -150,7 +150,7 @@ describe('App', () => {
     if (eventSource === undefined) throw new Error('Expected an EventSource connection');
 
     eventSource.open();
-    expect(await screen.findByRole('cell', { name: 'AAPL' })).toBeInTheDocument();
+    expect(await screen.findByText('AAPL', { exact: true })).toBeInTheDocument();
 
     eventSource.open();
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -171,7 +171,7 @@ describe('App', () => {
     if (eventSource === undefined) throw new Error('Expected an EventSource connection');
 
     act(() => eventSource.open());
-    expect(await screen.findByRole('cell', { name: 'AAPL' })).toBeInTheDocument();
+    expect(await screen.findByText('AAPL', { exact: true })).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Live');
 
     act(() => eventSource.onerror?.());
@@ -208,7 +208,7 @@ describe('App', () => {
       vi.useRealTimers();
       act(() => reconnectedEventSource.open());
 
-      expect(await screen.findByRole('cell', { name: 'AAPL' })).toBeInTheDocument();
+      expect(await screen.findByText('AAPL', { exact: true })).toBeInTheDocument();
       expect(screen.getByRole('status')).toHaveTextContent('Live');
       expect(fetchMock).toHaveBeenCalledWith('/api/v1/trades');
     } finally {
@@ -227,7 +227,7 @@ describe('App', () => {
     if (eventSource === undefined) throw new Error('Expected an EventSource connection');
 
     eventSource.open();
-    expect(await screen.findByRole('cell', { name: 'AAPL' })).toBeInTheDocument();
+    expect(await screen.findByText('AAPL', { exact: true })).toBeInTheDocument();
     eventSource.onerror?.();
     expect(screen.getByRole('button', { name: 'Refresh trades' })).toBeEnabled();
 
@@ -235,8 +235,8 @@ describe('App', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     refreshedSnapshot.resolve(jsonResponse({ items: [{ ...activeTrade, symbol: 'MSFT' }] }));
 
-    expect(await screen.findByRole('cell', { name: 'MSFT' })).toBeInTheDocument();
-    expect(screen.queryByRole('cell', { name: 'AAPL' })).not.toBeInTheDocument();
+    expect(await screen.findByText('MSFT', { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText('AAPL', { exact: true })).not.toBeInTheDocument();
   });
 
   it('keeps the last successful snapshot visible when manual refresh fails', async () => {
@@ -249,13 +249,13 @@ describe('App', () => {
     if (eventSource === undefined) throw new Error('Expected an EventSource connection');
 
     eventSource.open();
-    expect(await screen.findByRole('cell', { name: 'AAPL' })).toBeInTheDocument();
+    expect(await screen.findByText('AAPL', { exact: true })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Refresh trades' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Refresh failed. Showing the last successful snapshot.',
     );
-    expect(screen.getByRole('cell', { name: 'AAPL' })).toBeInTheDocument();
+    expect(screen.getByText('AAPL', { exact: true })).toBeInTheDocument();
   });
 
   it('closes the event stream when unmounted', () => {
@@ -304,7 +304,7 @@ describe('App', () => {
     const eventSource = MockEventSource.instances[0];
     if (eventSource === undefined) throw new Error('Expected an EventSource connection');
     eventSource.open();
-    expect(await screen.findByRole('cell', { name: 'AAPL' })).toBeInTheDocument();
+    expect(await screen.findByText('AAPL', { exact: true })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'New trade' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Symbol' }), {
@@ -330,7 +330,7 @@ describe('App', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Create trade' }));
 
-    expect(await screen.findByRole('cell', { name: 'trade-created' })).toBeInTheDocument();
+    expect(await screen.findByText('MSFT', { exact: true })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       '/api/v1/trades',
@@ -348,13 +348,14 @@ describe('App', () => {
     const eventSource = MockEventSource.instances[0];
     if (eventSource === undefined) throw new Error('Expected an EventSource connection');
     eventSource.open();
-    const row = await screen.findByRole('row', { name: /trade-1/ });
+    const row = await screen.findByRole('row', { name: /AAPL/ });
 
-    fireEvent.click(within(row).getByRole('button', { name: 'Amend trade-1' }));
+    fireEvent.click(within(row).getByRole('button', { name: 'Trade actions for trade-1' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Amend' }));
     fireEvent.change(screen.getByLabelText('Symbol'), { target: { value: 'MSFT' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
-    expect(await screen.findByRole('cell', { name: 'MSFT' })).toBeInTheDocument();
+    expect(await screen.findByText('MSFT', { exact: true })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       '/api/v1/trades/trade-1',
@@ -378,14 +379,15 @@ describe('App', () => {
     const eventSource = MockEventSource.instances[0];
     if (eventSource === undefined) throw new Error('Expected an EventSource connection');
     eventSource.open();
-    const row = await screen.findByRole('row', { name: /trade-1/ });
+    const row = await screen.findByRole('row', { name: /AAPL/ });
 
-    fireEvent.click(within(row).getByRole('button', { name: 'Cancel trade-1' }));
+    fireEvent.click(within(row).getByRole('button', { name: 'Trade actions for trade-1' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Cancel trade' }));
     expect(screen.getByRole('dialog', { name: 'Cancel trade?' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }));
 
     expect(await screen.findByText('Cancelled')).toBeInTheDocument();
-    expect(screen.getByRole('row', { name: /trade-1/ })).toBeInTheDocument();
+    expect(screen.getByRole('row', { name: /AAPL/ })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       '/api/v1/trades/trade-1',

@@ -1,3 +1,5 @@
+Reusable trade UI belongs in `frontend/src/features/trades/components/`, not in a global component bucket. Keep each component's `*.stories.tsx` and `*.test.tsx` beside it. Storybook imports stories from this components directory; use its controls and accessibility addon to ideate/test components independently before page integration. Components receive typed data and callbacks; keep REST/SSE calls and feature orchestration in `TradeHistoryPage` or feature hooks. Reserve a top-level `components/` directory for genuinely app-wide UI. Add API, hook, or utility subfolders only when related files justify them.
+
 # Fusion Platform
 
 A small full-stack trading platform take-home project. The repository is organized as a monorepo with separate `frontend` and `backend` packages, plus a PostgreSQL service and shared local-development tooling.
@@ -71,7 +73,7 @@ Use kebab-case filenames such as `trade-controller.ts`, `trade-service.ts`, and 
 - Trade services own use-case coordination and business rules for creating, amending, and cancelling trades.
 - The repository owns PostgreSQL queries and transactions. PostgreSQL remains the system of record.
 - `TradeCache` owns an in-process `Map<TradeId, Trade>` used to serve the full collection after initial hydration.
-- A typed event publisher emits `trade.created`, `trade.amended`, `trade.cancelled`, and `trade.reactivated` after persistence and cache update. The SSE endpoint broadcasts committed trade changes to connected clients.
+- A typed event publisher emits `trade.created`, `trade.amended`, and `trade.cancelled` after persistence and cache update. The SSE endpoint broadcasts committed trade changes to connected clients. Cancellation is terminal; the backend does not support direct reactivation.
 
 **Startup and read flow:** `setup.sh` applies SQL migrations and optionally seeds an empty database before starting the backend. The backend connects to PostgreSQL and loads persisted trades into the Map before listening. `GET /ready` reports HTTP `200` only while PostgreSQL responds and cache hydration is complete; otherwise it returns `503`. Compose uses readiness before starting dependent services. `GET /api/v1/trades` returns `{ items }` for the complete collection, without redundant counts or pagination metadata; it does not perform a database load on each request. If startup hydration fails, the service does not begin serving. The client sorts and filters locally; the API does not page the collection server-side.
 
@@ -79,7 +81,7 @@ Use kebab-case filenames such as `trade-controller.ts`, `trade-service.ts`, and 
 
 **Security, logging, and payloads:** Helmet is applied globally for security headers. Its CSP permits the inline scripts and styles Swagger UI requires; `upgrade-insecure-requests` is enabled only in production so the HTTP development server can load its assets. `pino-http` emits structured request logs to stdout, and unexpected errors are logged with the request ID. Express compression negotiates gzip for sufficiently large compressible responses; the SSE route is excluded to avoid delaying streamed events. Logs are not stored in PostgreSQL or application-managed files; retention and shipping belong to the container/runtime environment. The backend currently has no authentication, rate limiter, or API gateway because these are not assessment requirements.
 
-**Exploring the API:** Open <http://localhost:4001/api-docs> on the configured backend port. Swagger UI uses that same origin for "Try it out"; no additional service or port is needed. Active trades can be amended with editable fields, cancelled with `{ "status": "CANCELLED" }`, or reactivated with `{ "status": "ACTIVE" }` through `PATCH /api/v1/trades/{tradeId}`. The SSE operation documents `trade.created`, `trade.amended`, `trade.cancelled`, and `trade.reactivated`, their JSON payloads, wire format, reconnect delay, and recovery limitations. Swagger UI is not a live event viewer: use `curl -N http://localhost:4001/api/v1/events` or a browser `EventSource`. Events have no IDs or durable replay; the frontend reloads the collection on reconnect and reconciles events buffered during snapshot fetches.
+**Exploring the API:** Open <http://localhost:4001/api-docs> on the configured backend port. Swagger UI uses that same origin for "Try it out"; no additional service or port is needed. Active trades can be amended with editable fields or cancelled with `{ "status": "CANCELLED" }` through `PATCH /api/v1/trades/{tradeId}`. A cancelled trade cannot be directly returned to `ACTIVE`. The SSE operation documents `trade.created`, `trade.amended`, and `trade.cancelled`, their JSON payloads, wire format, reconnect delay, and recovery limitations. Swagger UI is not a live event viewer: use `curl -N http://localhost:4001/api/v1/events` or a browser `EventSource`. Events have no IDs or durable replay; the frontend reloads the collection on reconnect and reconciles events buffered during snapshot fetches.
 
 **Mutation flow:** The controller validates the request; the service applies domain rules; the repository commits to PostgreSQL and returns the saved trade; the service then updates the Map synchronously and publishes the corresponding event. A persistence failure must leave the cache unchanged and publish no event. SSE delivery failures must not turn an already-committed HTTP mutation into a failure.
 
@@ -95,7 +97,7 @@ Use kebab-case filenames such as `trade-controller.ts`, `trade-service.ts`, and 
 
 **Decision:** Use SSE for committed trade notifications because the browser sends commands through REST and only needs server-to-client updates. Native `EventSource` keeps the client simple and reconnects automatically; WebSockets or Socket.IO would be reconsidered if bidirectional messaging, rooms, or acknowledgements become requirements.
 
-The backend publishes `trade.created`, `trade.amended`, `trade.cancelled`, and `trade.reactivated` only after persistence and cache update. The frontend opens the stream before fetching its initial snapshot, buffers events while the fetch is in flight, and reloads the collection after reconnect. Events are process-local and non-durable; missed events are recovered by reloading the collection, not replaying the stream.
+The backend publishes `trade.created`, `trade.amended`, and `trade.cancelled` only after persistence and cache update. The frontend opens the stream before fetching its initial snapshot, buffers events while the fetch is in flight, and reloads the collection after reconnect. Events are process-local and non-durable; missed events are recovered by reloading the collection, not replaying the stream.
 
 **Concurrency and alternatives:** Amendments use an atomic active-status condition in PostgreSQL, but do not use version-based optimistic concurrency; concurrent amendments to an active trade may overwrite one another. Redis, distributed caching, and multiple services are deferred because the assessment specifies neither multi-instance scale nor a cache bottleneck. This is a single-process architecture with explicit limits, not a horizontally scaled design.
 
@@ -103,30 +105,72 @@ The proposed backend workflows and acceptance criteria are documented in [backen
 
 ### Frontend Structure
 
-The frontend currently uses a compact `App.tsx` entry and colocated tests. As the assessment workflows grow, organize code by application shell and business feature rather than by global component type. This is the recommended destination, not a claim that every directory already exists:
+Use component-first, feature-local organization. `App.tsx` is the application shell that owns global providers and the error boundary; it renders the trade feature's `TradeHistoryPage`. `main.tsx` mounts the app in the browser. `TradeHistoryPage` is the single Trade History screen and feature wrapper: it owns trade data orchestration and composes reusable components. Build and explore each component in Storybook before integrating it into the page. The structure below is the target pattern; some child view files are created as components are developed.
 
 ```text
 frontend/src/
-├── app/
-│   ├── App.tsx
-│   └── providers.tsx
+├── App.tsx                         # application shell, providers, error boundary
+├── main.tsx                        # browser mount
+├── index.css
+├── components/                     # app-wide UI only when reused across features
+│   └── app-error-boundary.tsx
+├── contexts/
+│   └── connection-status-context.ts
 ├── features/
 │   └── trades/
+│       ├── TradeHistoryPage.tsx     # trade orchestration and component composition
+│       ├── TradeHistoryPage.test.tsx
 │       ├── api/
-│       ├── components/
 │       ├── hooks/
-│       └── schemas.ts
-├── shared/
-│   ├── components/
-│   ├── hooks/
-│   └── lib/
-├── test/
-│   └── mocks/
-├── index.css
-└── main.tsx
+│       ├── trade-schema.ts
+│       └── components/
+│           ├── TradeBlotterTable/
+│           │   ├── index.tsx
+│           │   ├── TradeBlotterTableView.tsx
+│           │   ├── TradeBlotterTable.stories.tsx
+│           │   └── TradeBlotterTable.test.tsx
+│           ├── TradePagination/
+│           │   ├── index.tsx
+│           │   ├── TradePaginationView.tsx
+│           │   ├── TradePagination.stories.tsx
+│           │   └── TradePagination.test.tsx
+│           ├── TradeFilterToolbar/
+│           │   ├── index.tsx
+│           │   ├── SymbolSearch.tsx
+│           │   ├── TradeFilterDialog.tsx
+│           │   ├── types.ts
+│           │   ├── TradeFilterToolbar.stories.tsx
+│           │   └── TradeFilterToolbar.test.tsx
+│           ├── TradeRowActions/
+│           │   ├── index.tsx
+│           │   ├── TradeRowActionsView.tsx
+│           │   ├── TradeRowActions.stories.tsx
+│           │   └── TradeRowActions.test.tsx
+│           ├── TradeStatusBadge/
+│           │   ├── index.tsx
+│           │   ├── TradeStatusBadgeView.tsx
+│           │   ├── TradeStatusBadge.stories.tsx
+│           │   └── TradeStatusBadge.test.tsx
+│           ├── CreateTradeDialog/
+│           │   ├── index.tsx
+│           │   ├── CreateTradeDialogView.tsx
+│           │   ├── types.ts
+│           │   ├── CreateTradeDialog.stories.tsx
+│           │   └── CreateTradeDialog.test.tsx
+│           ├── AmendTradeDialog/
+│           │   ├── index.tsx
+│           │   ├── AmendTradeDialogView.tsx
+│           │   ├── types.ts
+│           │   ├── AmendTradeDialog.stories.tsx
+│           │   └── AmendTradeDialog.test.tsx
+│           └── CancelTradeDialog/
+│               ├── index.tsx
+│               ├── CancelTradeDialogView.tsx
+│               ├── CancelTradeDialog.stories.tsx
+│               └── CancelTradeDialog.test.tsx
 ```
 
-Keep trade-specific API access, query hooks, schemas, and UI within `features/trades/`; reserve `shared/` for code used by multiple features. Keep tests and Storybook stories beside the component or hook they exercise (`*.test.tsx`, `*.stories.tsx`); put shared MSW handlers under `test/mocks/` when that tooling is approved and configured. Add subfolders only when there are related files to group. Keep providers and application-wide error handling in `app/`, and let `main.tsx` remain the browser entry point.
+Each custom component gets its own PascalCase directory under `frontend/src/features/trades/components/`. Its `index.tsx` is the parent: it owns that component's logic/state and composes focused child components. Child components hold focused markup and styling, receive typed data and callbacks, and never call APIs. Keep each component's Storybook stories and RTL tests in its folder. Storybook's configured glob discovers these stories there. At the page level, `TradeHistoryPage` owns server state, REST/SSE orchestration, and mutations, then composes the component entries. Build and review each component in Storybook before page integration. Reserve `frontend/src/components/` for genuinely app-wide UI. Add API, hook, or utility subfolders only when related files justify them.
 
 Use TanStack Query for server-state caching and mutations, React Context for genuinely shared client state, TanStack Table for grid interactions, and React Hook Form/Zod for forms and validation. Do not mirror query-owned trade data in Context. Continue using the Vite `/api` proxy for browser requests. Vite provides development hot module replacement; the production Dockerfile uses Nginx to serve the built static assets.
 
