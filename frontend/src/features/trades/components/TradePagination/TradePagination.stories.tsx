@@ -5,9 +5,10 @@ const meta = {
   title: 'Trade History/TradePagination',
   component: TradePagination,
   args: {
-    pageIndex: 0,
+    page: 1,
     pageSize: 100,
-    totalItems: 140,
+    totalItems: 245,
+    pageCount: 3,
     onPageChange: () => undefined,
   },
 } satisfies Meta<typeof TradePagination>;
@@ -17,10 +18,10 @@ type Story = StoryObj<typeof meta>;
 
 export const FirstPage: Story = {};
 
-export const LastPage: Story = {
-  args: { pageIndex: 1 },
+export const FinalPage: Story = {
+  args: { page: 3 },
 };
 
 export const Empty: Story = {
-  args: { totalItems: 0 },
+  args: { page: 1, pageCount: 0, totalItems: 0 },
 };

@@ -8,6 +8,20 @@ export const HttpStatus = {
   SERVICE_UNAVAILABLE: 503,
 } as const;
 
+export const DEFAULT_TRADE_PAGE_SIZE = 100;
+export const MAX_TRADE_PAGE_SIZE = 500;
+export const DEFAULT_TRADE_SORT_BY = 'tradeTimestamp';
+export const DEFAULT_TRADE_SORT_DIRECTION = 'desc';
+export const TRADE_SORT_FIELDS = [
+  'tradeTimestamp',
+  'symbol',
+  'quantity',
+  'price',
+  'side',
+  'trader',
+  'status',
+] as const;
+
 export const ApiPath = {
   health: '/health',
   readiness: '/ready',

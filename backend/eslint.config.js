@@ -41,6 +41,7 @@ export default tseslint.config(
             'tests/features/trades/api/*.test.ts',
             'tests/features/trades/repositories/*.test.ts',
             'tests/features/trades/services/*.test.ts',
+            'tests/integration/*.test.ts',
             'tests/openapi/*.test.ts',
           ],
         },

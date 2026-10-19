@@ -5,8 +5,8 @@ import {
   tradeNotFoundErrorSchema,
   validationErrorSchema,
   tradeCollectionResponseSchema,
-  tradeResponseSchema,
 } from '../../../../src/schemas.ts';
+import { DEFAULT_TRADE_PAGE_SIZE, MAX_TRADE_PAGE_SIZE } from '../../../../src/constants.ts';
 import { createApp } from '../../../../src/app.ts';
 import { ApiPath, TradeEventType } from '../../../../src/constants.ts';
 import { HealthController } from '../../../../src/features/health/controllers/health-controller.ts';
@@ -87,18 +87,6 @@ describe('GET /api/trades', () => {
     expect(tradeCollectionResponseSchema.parse(response.body)).toEqual({
       items: [
         {
-          id: 'trade-1',
-          symbol: 'AAPL',
-          quantity: 100,
-          price: 185.25,
-          side: 'BUY',
-          trader: 'Alex Morgan',
-          tradeTimestamp: '2026-10-14T12:00:00.000Z',
-          status: 'ACTIVE',
-          book: null,
-          counterparty: null,
-        },
-        {
           id: 'trade-2',
           symbol: 'MSFT',
           quantity: 50,
@@ -110,9 +98,132 @@ describe('GET /api/trades', () => {
           book: null,
           counterparty: null,
         },
+        {
+          id: 'trade-1',
+          symbol: 'AAPL',
+          quantity: 100,
+          price: 185.25,
+          side: 'BUY',
+          trader: 'Alex Morgan',
+          tradeTimestamp: '2026-10-14T12:00:00.000Z',
+          status: 'ACTIVE',
+          book: null,
+          counterparty: null,
+        },
       ],
+      pagination: {
+        page: 1,
+        pageSize: DEFAULT_TRADE_PAGE_SIZE,
+        totalItems: 2,
+        pageCount: 1,
+      },
     });
   });
+
+  it('applies combined filters, sort, and numbered pagination to the complete result set', async () => {
+    const tradeCache = new TradeCache();
+    const firstTrade: Trade = {
+      id: 'trade-1',
+      symbol: 'AAPL',
+      quantity: 100,
+      price: 185.25,
+      side: 'BUY',
+      trader: 'Alex Morgan',
+      tradeTimestamp: '2026-10-14T12:00:00.000Z',
+      status: 'ACTIVE',
+    };
+    const secondTrade: Trade = {
+      ...firstTrade,
+      id: 'trade-2',
+      quantity: 200,
+      side: 'SELL',
+      tradeTimestamp: '2026-10-14T13:00:00.000Z',
+    };
+    tradeCache.hydrate([
+      firstTrade,
+      secondTrade,
+      { ...firstTrade, id: 'trade-3', symbol: 'MSFT' },
+      { ...firstTrade, id: 'trade-4', trader: 'Sam Lee' },
+      { ...firstTrade, id: 'trade-5', status: 'CANCELLED' },
+    ]);
+    const response = await request(createTestApp(tradeCache))
+      .get(ApiPath.trades)
+      .query({
+        page: 2,
+        pageSize: 1,
+        sortBy: 'symbol',
+        sortDirection: 'asc',
+        symbol: 'AAP',
+        trader: 'Alex',
+        side: ['BUY', 'SELL'],
+        status: ['ACTIVE'],
+        startDate: '2026-10-14T00:00:00.000Z',
+        endDate: '2026-10-15T00:00:00.000Z',
+      });
+
+    expect(response.status).toBe(200);
+    expect(tradeCollectionResponseSchema.parse(response.body)).toEqual({
+      items: [
+        {
+          ...secondTrade,
+          book: null,
+          counterparty: null,
+        },
+      ],
+      pagination: { page: 2, pageSize: 1, totalItems: 2, pageCount: 2 },
+    });
+  });
+
+  it('returns an empty page with exact metadata when the requested page is beyond the result', async () => {
+    const tradeCache = new TradeCache();
+    tradeCache.hydrate([
+      {
+        id: 'trade-1',
+        symbol: 'AAPL',
+        quantity: 100,
+        price: 185.25,
+        side: 'BUY',
+        trader: 'Alex Morgan',
+        tradeTimestamp: '2026-10-14T12:00:00.000Z',
+        status: 'ACTIVE',
+      },
+    ]);
+
+    const response = await request(createTestApp(tradeCache))
+      .get(ApiPath.trades)
+      .query({ page: 3, pageSize: 1 });
+
+    expect(response.status).toBe(200);
+    expect(tradeCollectionResponseSchema.parse(response.body)).toEqual({
+      items: [],
+      pagination: { page: 3, pageSize: 1, totalItems: 1, pageCount: 1 },
+    });
+  });
+
+  it.each([
+    { query: { page: -1 }, field: 'page' },
+    { query: { page: 0 }, field: 'page' },
+    { query: { pageSize: MAX_TRADE_PAGE_SIZE + 1 }, field: 'pageSize' },
+    { query: { sortBy: 'symbol; DROP TABLE Trade' }, field: 'sortBy' },
+    { query: { sortDirection: 'sideways' }, field: 'sortDirection' },
+    {
+      query: { startDate: '2026-10-15T00:00:00.000Z', endDate: '2026-10-14T00:00:00.000Z' },
+      field: 'endDate',
+    },
+  ])(
+    'rejects invalid query values with a structured validation error',
+    async ({ query, field }) => {
+      const tradeCache = new TradeCache();
+      tradeCache.hydrate([]);
+      const getAll = vi.spyOn(tradeCache, 'getAll');
+
+      const response = await request(createTestApp(tradeCache)).get(ApiPath.trades).query(query);
+
+      expect(response.status).toBe(400);
+      expect(validationErrorSchema.parse(response.body).error.details[0]?.field).toBe(field);
+      expect(getAll).not.toHaveBeenCalled();
+    },
+  );
 
   it('returns an empty collection when an empty database has been hydrated', async () => {
     const tradeCache = new TradeCache();
@@ -123,6 +234,12 @@ describe('GET /api/trades', () => {
     expect(response.status).toBe(200);
     expect(tradeCollectionResponseSchema.parse(response.body)).toEqual({
       items: [],
+      pagination: {
+        page: 1,
+        pageSize: DEFAULT_TRADE_PAGE_SIZE,
+        totalItems: 0,
+        pageCount: 0,
+      },
     });
   });
 
@@ -151,7 +268,9 @@ describe('GET /api/trades', () => {
   });
 
   it('returns a generic error response for unexpected failures', async () => {
-    const response = await request(createTestApp(new FailingTradeCache())).get(ApiPath.trades);
+    const tradeCache = new FailingTradeCache();
+    tradeCache.hydrate([]);
+    const response = await request(createTestApp(tradeCache)).get(ApiPath.trades);
 
     expect(response.status).toBe(500);
     expect(response.body).toEqual({
@@ -302,57 +421,6 @@ describe('GET /api/trades', () => {
     expect(createTrade).not.toHaveBeenCalled();
     expect(tradeCache.getAll()).toEqual([]);
     expect(receivedEvents).toEqual([]);
-  });
-});
-
-describe('GET /api/v1/trades/:tradeId', () => {
-  const trade: Trade = {
-    id: 'trade-1',
-    symbol: 'AAPL',
-    quantity: 100,
-    price: 185.25,
-    side: 'BUY',
-    trader: 'Alex Morgan',
-    tradeTimestamp: '2026-10-14T12:00:00.000Z',
-    status: 'ACTIVE',
-  };
-
-  it('returns the cached trade by ID', async () => {
-    const tradeCache = new TradeCache();
-    tradeCache.hydrate([trade]);
-
-    const response = await request(createTestApp(tradeCache)).get(`${ApiPath.trades}/${trade.id}`);
-
-    expect(response.status).toBe(200);
-    expect(tradeResponseSchema.parse(response.body)).toEqual({
-      ...trade,
-      book: null,
-      counterparty: null,
-    });
-  });
-
-  it('returns the standard 404 error for an unknown trade ID', async () => {
-    const tradeCache = new TradeCache();
-    tradeCache.hydrate([]);
-
-    const response = await request(createTestApp(tradeCache)).get(
-      `${ApiPath.trades}/missing-trade`,
-    );
-
-    expect(response.status).toBe(404);
-    expect(tradeNotFoundErrorSchema.parse(response.body).error.code).toBe('TRADE_NOT_FOUND');
-  });
-
-  it('returns a validation error for an invalid trade ID', async () => {
-    const tradeCache = new TradeCache();
-    tradeCache.hydrate([]);
-
-    const response = await request(createTestApp(tradeCache)).get(
-      `${ApiPath.trades}/${'x'.repeat(33)}`,
-    );
-
-    expect(response.status).toBe(400);
-    expect(validationErrorSchema.parse(response.body).error.code).toBe('VALIDATION_FAILED');
   });
 });
 

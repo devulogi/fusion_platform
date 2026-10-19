@@ -15,13 +15,36 @@ export const tradeSchema = z
   })
   .strict();
 
-export const tradeCollectionSchema = z.object({ items: z.array(tradeSchema) }).strict();
+export const tradePageSchema = z
+  .object({
+    items: z.array(tradeSchema),
+    pagination: z
+      .object({
+        page: z.number().int().positive(),
+        pageSize: z.number().int().positive(),
+        totalItems: z.number().int().nonnegative(),
+        pageCount: z.number().int().nonnegative(),
+      })
+      .strict(),
+  })
+  .strict();
 
-export const tradeEventTypes = [
-  'trade.created',
-  'trade.amended',
-  'trade.cancelled',
-  'trade.reactivated',
-] as const;
+export const tradeEventTypes = ['trade.created', 'trade.amended', 'trade.cancelled'] as const;
 
 export type Trade = z.infer<typeof tradeSchema>;
+export type TradePage = z.infer<typeof tradePageSchema>;
+export type TradeSortBy =
+  'symbol' | 'tradeTimestamp' | 'quantity' | 'price' | 'trader' | 'side' | 'status';
+export type TradeSortDirection = 'asc' | 'desc';
+export type TradeQuery = {
+  page: number;
+  pageSize: number;
+  sortBy: TradeSortBy;
+  sortDirection: TradeSortDirection;
+  symbol: string;
+  trader: string;
+  sides: Trade['side'][];
+  statuses: Trade['status'][];
+  startDate: string;
+  endDate: string;
+};

@@ -31,12 +31,6 @@ export class TradeCache {
     return Array.from(this.tradesById.values(), (trade) => ({ ...trade }));
   }
 
-  getById(id: TradeId): Trade | undefined {
-    this.assertHydrated();
-    const trade = this.tradesById.get(id);
-    return trade ? { ...trade } : undefined;
-  }
-
   isHydrated(): boolean {
     return this.hydrated;
   }

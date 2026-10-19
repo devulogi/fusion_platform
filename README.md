@@ -1,13 +1,11 @@
-Reusable trade UI belongs in `frontend/src/features/trades/components/`, not in a global component bucket. Keep each component's `*.stories.tsx` and `*.test.tsx` beside it. Storybook imports stories from this components directory; use its controls and accessibility addon to ideate/test components independently before page integration. Components receive typed data and callbacks; keep REST/SSE calls and feature orchestration in `TradeHistoryPage` or feature hooks. Reserve a top-level `components/` directory for genuinely app-wide UI. Add API, hook, or utility subfolders only when related files justify them.
-
 # Fusion Platform
 
 A small full-stack trading platform take-home project. The repository is organized as a monorepo with separate `frontend` and `backend` packages, plus a PostgreSQL service and shared local-development tooling.
 
 ## Architecture
 
-- `frontend/`: React 18, TypeScript, Vite, Tailwind CSS, TanStack Table, React Hook Form, and Zod.
-- `backend/`: Express 4 and TypeScript, with Vitest and Supertest for testing.
+- `frontend/`: React, TypeScript, Vite, Tailwind CSS, TanStack Query/Table, React Hook Form, and Zod.
+- `backend/`: Express and TypeScript, Prisma/PostgreSQL persistence, Zod/OpenAPI contracts, and Vitest/Supertest tests.
 - `database/`: PostgreSQL 16 development image, versioned SQL migrations, idempotent migration/seed shell scripts, and the randomized SQL trade dataset.
 - `workspace`: Node 24 development container used by VS Code.
 - `docker-compose.yml`: starts the workspace, database, backend, and frontend services.
@@ -15,6 +13,124 @@ A small full-stack trading platform take-home project. The repository is organiz
 The backend currently listens on port `4001`; the frontend's Vite server is published on host port `3001`; PostgreSQL is published on port `5432`.
 
 Compose loads backend connection settings from `backend/.env.dev` and frontend settings from `frontend/.env.dev`. The `database` service owns the `SEED_TRADES` and `SEED_TRADES_COUNT` settings. The backend connects to PostgreSQL by its Compose service name; frontend API requests use the Vite `/api` proxy to reach the backend. The frontend does not connect directly to PostgreSQL.
+
+## Data Flow
+
+The backend is the system of record boundary. PostgreSQL is hydrated into a process-local cache at startup; collection reads filter, sort, count, and page a defensive cache snapshot. Mutations commit to PostgreSQL before changing that cache or publishing events. The frontend keeps the active page query in TanStack Query, sends REST requests through Vite's `/api` proxy, and uses SSE only as a signal to refetch the active page. It does not merge event payloads into a partial page.
+
+### Backend (Only)
+
+```mermaid
+flowchart TD
+	postgres[(PostgreSQL)]
+	startup[Backend startup]
+	repository[TradeRepository.findAll]
+	hydrate[TradeCache.hydrate]
+	cache[(Process-local Map)]
+	startup --> repository
+	postgres -->|loaded trades| repository
+	repository -->|loaded trades| hydrate --> cache
+
+	list[GET /api/v1/trades]
+	controller[TradeController]
+	service[TradeService.getTradePage]
+	snapshot[Defensive cache snapshot]
+	query[Filter, sort, count, and page]
+	page["200: { items, pagination }"]
+	list --> controller --> service
+	cache --> snapshot --> query --> page
+
+	command["POST /api/v1/trades or PATCH /api/v1/trades/:tradeId"]
+	mutation[TradeController and TradeService]
+	write[TradeRepository mutation]
+	saved[Canonical saved trade]
+	update[Cache add or replace]
+	publish[TradeEventPublisher]
+	stream["SSE /api/v1/events: trade.created / trade.amended / trade.cancelled"]
+	command --> mutation --> write
+	write -->|commit| postgres
+	postgres -->|committed trade| saved --> update --> cache --> publish --> stream
+```
+
+Startup must connect to PostgreSQL and hydrate the cache before the server listens. `/ready` is healthy only while PostgreSQL is reachable and hydration is complete. Collection queries do not read PostgreSQL per request; direct database writes and writes made by another backend instance are not visible until rehydration. Mutation ordering is database commit, cache update, then event publication.
+
+### Frontend (Only)
+
+```mermaid
+flowchart TD
+	user[User]
+	page[TradeHistoryPage and trade components]
+	history[useTradeHistory]
+	query[TanStack Query: active page and previous data]
+	api[trade-api.ts: validate responses and build requests]
+	proxy[Vite /api proxy]
+	rest[Backend REST and SSE endpoints]
+	eventHook[useTradeEvents]
+	eventSource[EventSource /api/v1/events]
+	status[Connection status context]
+
+	user --> page --> history
+	history <--> query
+	history -->|list and mutation requests| api --> proxy --> rest
+	rest -->|page response| api --> query
+	rest -->|mutation result| api --> history
+	eventHook --> eventSource
+	eventSource -->|GET /api/v1/events via /api proxy| proxy --> rest
+	rest -->|named SSE events| proxy --> eventSource
+	eventSource -->|open, reconnect, valid trade event| history
+	eventHook --> status --> page
+	history -->|successful mutation or event: refetch active query| api
+```
+
+Create, amend, and cancel forms submit REST commands through `trade-api.ts`; successful mutations refetch the active numbered query. The event hook validates event payloads and refreshes that same query on valid events, stream open, and reconnect. Event payloads are not upserted into the current page. `TradeHistoryPage` composes the screen and owns dialog state; feature hooks own query/mutation orchestration and EventSource lifecycle.
+
+### Backend + Frontend (Combined)
+
+```mermaid
+flowchart LR
+	subgraph Browser[Frontend]
+		ui[TradeHistoryPage and controls]
+		hook[useTradeHistory]
+		query[TanStack Query]
+		api[trade-api.ts]
+		events[useTradeEvents and EventSource]
+		ui --> hook
+		hook <--> query
+		hook --> api
+		events -->|validated event or reconnect| hook
+	end
+
+	proxy[Vite /api proxy]
+	subgraph Server[Backend]
+		routes[Express routes and controllers]
+		service[TradeService]
+		cache[(Process-local trade cache)]
+		repo[TradeRepository]
+		publisher[TradeEventPublisher and SSE]
+		routes --> service
+		cache -->|collection snapshot| service
+		service -->|mutation| repo
+		repo -->|commit| postgres
+		postgres -->|committed trade| saved[Canonical saved trade]
+		saved --> service
+		service --> update[Update cache] --> cache
+		update --> publish[Publish event] --> publisher
+		service -->|page or command result| routes
+		routes -->|SSE subscription| publisher
+	end
+	postgres[(PostgreSQL)]
+
+	api -->|GET page, POST create, PATCH amend/cancel| proxy --> routes
+	routes -->|page response| proxy --> api --> query
+	routes -->|command response| proxy --> api --> hook
+	postgres -->|startup hydration read| repo
+	repo -->|hydrate| cache
+	publisher -->|named SSE event| proxy --> events
+	events -->|GET /api/v1/events| proxy --> routes
+	hook -->|successful mutation or event: refetch active query| api
+```
+
+The combined flow separates commands from notifications: REST responses acknowledge the initiating request, while process-local SSE informs connected browsers that committed data changed. The frontend then requests a fresh, correctly filtered/sorted page. SSE has no IDs or durable replay, so reconnect also refetches; multi-instance cache synchronization and event fan-out are not implemented.
 
 ## Architecture Decisions and Trade-offs
 
@@ -31,61 +147,62 @@ Compose loads backend connection settings from `backend/.env.dev` and frontend s
 
 ### Backend Folder Structure
 
-Backend code is organized feature-first, with conventional Express layers grouped inside each feature. The trade feature uses this layout:
+Backend code is organized by feature. The trade feature groups its HTTP layers and supporting domain/infrastructure code; smaller features contain only the layers they need. Shared application concerns stay at `src/`.
 
 ```text
-backend/src/
-├── app.ts
-├── constants.ts
-├── errors.ts
-├── schemas.ts
-├── features/
-│   ├── trades/
-│   │   ├── routes/
-│   │   ├── controllers/
-│   │   ├── services/
-│   │   ├── repositories/
-│   │   ├── trade-serializer.ts
-│   │   ├── trade-cache.ts
-│   │   ├── trade-event-publisher.ts
-│   │   └── trade-input.ts
-│   └── health/controllers/
-├── middleware.ts
-├── openapi/
-├── server.ts
-└── types.ts
+backend/
+├── src/
+│   ├── features/
+│   │   ├── trades/
+│   │   │   ├── routes/
+│   │   │   ├── controllers/
+│   │   │   ├── services/
+│   │   │   ├── repositories/
+│   │   │   └── trade-*.ts             # feature helpers and contracts
+│   │   └── health/
+│   │       └── controllers/
+│   ├── openapi/
+│   ├── app.ts                         # Express composition
+│   ├── server.ts                      # startup and dependency wiring
+│   ├── server-shutdown.ts
+│   ├── constants.ts
+│   ├── errors.ts
+│   ├── middleware.ts
+│   ├── schemas.ts
+│   └── types.ts
+├── prisma/schema.prisma
+└── tests/
+    ├── features/<feature>/            # API, repository, and service tests
+    ├── integration/
+    └── openapi/
 
-backend/prisma/schema.prisma
-backend/tests/features/trades/
-├── api/
-├── repositories/
-└── services/
 database/
 ├── migrations/
-└── scripts/
+├── scripts/
+└── seed/
 ```
 
-Use kebab-case filenames such as `trade-controller.ts`, `trade-service.ts`, and `trade-repository.ts`. Keep one-off feature helpers at the feature root; add a subfolder when it groups related files, not just to hold a singleton. Cross-cutting HTTP middleware is composed from `backend/src/middleware.ts`; feature-specific route middleware stays in its router. SQL migrations and seed scripts belong under `database/`.
+Use kebab-case filenames. Add a feature subfolder when it groups related files; keep one-off helpers with their owning feature. Shared HTTP middleware and application types live at `src/`; SQL migrations and seed scripts live under `database/`.
 
 **Responsibilities:**
 
 - Controllers parse HTTP input, validate request schemas with Zod, call a service, and map outcomes to HTTP responses.
 - Trade services own use-case coordination and business rules for creating, amending, and cancelling trades.
-- The repository owns PostgreSQL queries and transactions. PostgreSQL remains the system of record.
-- `TradeCache` owns an in-process `Map<TradeId, Trade>` used to serve the full collection after initial hydration.
+- The repository owns PostgreSQL writes and startup hydration. PostgreSQL remains the system of record.
+- `TradeCache` owns an in-process `Map<TradeId, Trade>` used for cache-backed list filters/sorts/pages after initial hydration and updated by successful writes. List queries operate on a defensive snapshot and do not mutate the Map.
 - A typed event publisher emits `trade.created`, `trade.amended`, and `trade.cancelled` after persistence and cache update. The SSE endpoint broadcasts committed trade changes to connected clients. Cancellation is terminal; the backend does not support direct reactivation.
 
-**Startup and read flow:** `setup.sh` applies SQL migrations and optionally seeds an empty database before starting the backend. The backend connects to PostgreSQL and loads persisted trades into the Map before listening. `GET /ready` reports HTTP `200` only while PostgreSQL responds and cache hydration is complete; otherwise it returns `503`. Compose uses readiness before starting dependent services. `GET /api/v1/trades` returns `{ items }` for the complete collection, without redundant counts or pagination metadata; it does not perform a database load on each request. If startup hydration fails, the service does not begin serving. The client sorts and filters locally; the API does not page the collection server-side.
+**Startup and read flow:** `setup.sh` applies SQL migrations and optionally seeds an empty database before starting the backend. The backend connects to PostgreSQL and hydrates the complete trade cache before listening. `GET /ready` reports HTTP `200` only while PostgreSQL responds and cache hydration is complete; otherwise it returns `503`. Compose uses readiness before starting dependent services. `GET /api/v1/trades` reads a defensive snapshot of the process-local cache, then applies validated filters, allow-listed sorting, and numbered offset pagination without a page-query database round trip. It returns `{ items, pagination: { page, pageSize, totalItems, pageCount } }`; the filtered total is computed from the same cache snapshot. Sort order always includes a deterministic ID tie-breaker. SSE events trigger a refetch of the current query rather than merging into a partial collection. Cache updates follow successful writes made through this process; direct database writes and writes through other backend instances are not reflected until rehydration. If startup hydration fails, the service does not begin serving.
 
 **HTTP contracts and traceability:** JSON REST errors use `{ error: { code, reason, requestId } }`, with `details: [{ field, reason }]` for invalid fields. A server-generated `X-Request-Id` accompanies both successful and failed responses and correlates with structured request/error logs. Request logs record normalized routes rather than raw URLs or query values. API changes are reflected in the OpenAPI document served at `/api-docs/openapi.yaml` and Swagger UI at `/api-docs/`. The frontend consumes the trade collection and event stream.
 
 **Security, logging, and payloads:** Helmet is applied globally for security headers. Its CSP permits the inline scripts and styles Swagger UI requires; `upgrade-insecure-requests` is enabled only in production so the HTTP development server can load its assets. `pino-http` emits structured request logs to stdout, and unexpected errors are logged with the request ID. Express compression negotiates gzip for sufficiently large compressible responses; the SSE route is excluded to avoid delaying streamed events. Logs are not stored in PostgreSQL or application-managed files; retention and shipping belong to the container/runtime environment. The backend currently has no authentication, rate limiter, or API gateway because these are not assessment requirements.
 
-**Exploring the API:** Open <http://localhost:4001/api-docs> on the configured backend port. Swagger UI uses that same origin for "Try it out"; no additional service or port is needed. Active trades can be amended with editable fields or cancelled with `{ "status": "CANCELLED" }` through `PATCH /api/v1/trades/{tradeId}`. A cancelled trade cannot be directly returned to `ACTIVE`. The SSE operation documents `trade.created`, `trade.amended`, and `trade.cancelled`, their JSON payloads, wire format, reconnect delay, and recovery limitations. Swagger UI is not a live event viewer: use `curl -N http://localhost:4001/api/v1/events` or a browser `EventSource`. Events have no IDs or durable replay; the frontend reloads the collection on reconnect and reconciles events buffered during snapshot fetches.
+**Exploring the API:** Open <http://localhost:4001/api-docs> on the configured backend port. Swagger UI uses that same origin for "Try it out"; no additional service or port is needed. Active trades can be amended with editable fields or cancelled with `{ "status": "CANCELLED" }` through `PATCH /api/v1/trades/{tradeId}`. A cancelled trade cannot be directly returned to `ACTIVE`. The SSE operation documents `trade.created`, `trade.amended`, and `trade.cancelled`, their JSON payloads, wire format, reconnect delay, and recovery limitations. Swagger UI is not a live event viewer: use `curl -N http://localhost:4001/api/v1/events` or a browser `EventSource`. Events have no IDs or durable replay; valid events and reconnects refetch the active server query.
 
-**Mutation flow:** The controller validates the request; the service applies domain rules; the repository commits to PostgreSQL and returns the saved trade; the service then updates the Map synchronously and publishes the corresponding event. A persistence failure must leave the cache unchanged and publish no event. SSE delivery failures must not turn an already-committed HTTP mutation into a failure.
+**Mutation flow:** The controller validates the request; the service applies domain rules; the repository commits to PostgreSQL and returns the saved trade; the service then updates the Map synchronously and publishes the corresponding event. A persistence failure must leave the cache unchanged and publish no event. SSE delivery failures must not turn an already-committed HTTP mutation into a failure. During shutdown, the backend stops accepting requests, ends active SSE streams and releases their subscriptions, waits for HTTP connections to close, then disconnects Prisma.
 
-**Cache trade-off:** A Map provides average O(1) lookup by trade ID, but producing the full collection remains O(n), and serialization and network payload costs remain proportional to the result. For up to 1,000 trades this is a deliberate, bounded single-process design, not a claim of sub-millisecond end-to-end reads. PostgreSQL remains authoritative; the cache is disposable and rehydrates from PostgreSQL on every startup. It is not shared across multiple backend instances.
+**Cache trade-off:** Page size bounds response transfer and browser memory, but filtering/sorting the in-memory snapshot costs O(n) or O(n log n) per request, and the backend still holds all trades in a process-local Map. This is appropriate for the configured 100–1,000 trade development dataset and avoids a network round trip per list request. PostgreSQL remains authoritative for writes and is the source used on startup; the cache is disposable, process-local, and does not observe direct or other-instance writes until rehydrated.
 
 ### Real-Time Transport Decision
 
@@ -97,7 +214,7 @@ Use kebab-case filenames such as `trade-controller.ts`, `trade-service.ts`, and 
 
 **Decision:** Use SSE for committed trade notifications because the browser sends commands through REST and only needs server-to-client updates. Native `EventSource` keeps the client simple and reconnects automatically; WebSockets or Socket.IO would be reconsidered if bidirectional messaging, rooms, or acknowledgements become requirements.
 
-The backend publishes `trade.created`, `trade.amended`, and `trade.cancelled` only after persistence and cache update. The frontend opens the stream before fetching its initial snapshot, buffers events while the fetch is in flight, and reloads the collection after reconnect. Events are process-local and non-durable; missed events are recovered by reloading the collection, not replaying the stream.
+The backend publishes `trade.created`, `trade.amended`, and `trade.cancelled` only after persistence and cache update. The frontend opens the stream before fetching its initial page. Valid events trigger a refetch of the active server query; they are not merged into a partial page. Reconnect also refetches the active query. Events are process-local and non-durable; missed changes are recovered by fetching again, not replaying the stream.
 
 **Concurrency and alternatives:** Amendments use an atomic active-status condition in PostgreSQL, but do not use version-based optimistic concurrency; concurrent amendments to an active trade may overwrite one another. Redis, distributed caching, and multiple services are deferred because the assessment specifies neither multi-instance scale nor a cache bottleneck. This is a single-process architecture with explicit limits, not a horizontally scaled design.
 
@@ -105,72 +222,30 @@ The proposed backend workflows and acceptance criteria are documented in [backen
 
 ### Frontend Structure
 
-Use component-first, feature-local organization. `App.tsx` is the application shell that owns global providers and the error boundary; it renders the trade feature's `TradeHistoryPage`. `main.tsx` mounts the app in the browser. `TradeHistoryPage` is the single Trade History screen and feature wrapper: it owns trade data orchestration and composes reusable components. Build and explore each component in Storybook before integrating it into the page. The structure below is the target pattern; some child view files are created as components are developed.
+The frontend keeps app-wide setup separate from feature code. Each feature owns its page, API/schema code, hooks, tests, and reusable UI. The trade feature illustrates the convention:
 
 ```text
 frontend/src/
-├── App.tsx                         # application shell, providers, error boundary
-├── main.tsx                        # browser mount
-├── index.css
-├── components/                     # app-wide UI only when reused across features
-│   └── app-error-boundary.tsx
+├── main.tsx
+├── App.tsx                          # providers and application shell
+├── components/                      # app-wide components only
 ├── contexts/
-│   └── connection-status-context.ts
+├── index.css
 ├── features/
 │   └── trades/
-│       ├── TradeHistoryPage.tsx     # trade orchestration and component composition
-│       ├── TradeHistoryPage.test.tsx
-│       ├── api/
-│       ├── hooks/
-│       ├── trade-schema.ts
+│       ├── TradeHistoryPage.tsx
+│       ├── trade-api.ts / trade-schema.ts
+│       ├── useTrade*.ts
+│       ├── *.test.tsx
 │       └── components/
-│           ├── TradeBlotterTable/
-│           │   ├── index.tsx
-│           │   ├── TradeBlotterTableView.tsx
-│           │   ├── TradeBlotterTable.stories.tsx
-│           │   └── TradeBlotterTable.test.tsx
-│           ├── TradePagination/
-│           │   ├── index.tsx
-│           │   ├── TradePaginationView.tsx
-│           │   ├── TradePagination.stories.tsx
-│           │   └── TradePagination.test.tsx
-│           ├── TradeFilterToolbar/
-│           │   ├── index.tsx
-│           │   ├── SymbolSearch.tsx
-│           │   ├── TradeFilterDialog.tsx
-│           │   ├── types.ts
-│           │   ├── TradeFilterToolbar.stories.tsx
-│           │   └── TradeFilterToolbar.test.tsx
-│           ├── TradeRowActions/
-│           │   ├── index.tsx
-│           │   ├── TradeRowActionsView.tsx
-│           │   ├── TradeRowActions.stories.tsx
-│           │   └── TradeRowActions.test.tsx
-│           ├── TradeStatusBadge/
-│           │   ├── index.tsx
-│           │   ├── TradeStatusBadgeView.tsx
-│           │   ├── TradeStatusBadge.stories.tsx
-│           │   └── TradeStatusBadge.test.tsx
-│           ├── CreateTradeDialog/
-│           │   ├── index.tsx
-│           │   ├── CreateTradeDialogView.tsx
-│           │   ├── types.ts
-│           │   ├── CreateTradeDialog.stories.tsx
-│           │   └── CreateTradeDialog.test.tsx
-│           ├── AmendTradeDialog/
-│           │   ├── index.tsx
-│           │   ├── AmendTradeDialogView.tsx
-│           │   ├── types.ts
-│           │   ├── AmendTradeDialog.stories.tsx
-│           │   └── AmendTradeDialog.test.tsx
-│           └── CancelTradeDialog/
+│           └── <ComponentName>/
 │               ├── index.tsx
-│               ├── CancelTradeDialogView.tsx
-│               ├── CancelTradeDialog.stories.tsx
-│               └── CancelTradeDialog.test.tsx
+│               ├── *View.tsx
+│               ├── *.stories.tsx
+│               └── *.test.tsx
 ```
 
-Each custom component gets its own PascalCase directory under `frontend/src/features/trades/components/`. Its `index.tsx` is the parent: it owns that component's logic/state and composes focused child components. Child components hold focused markup and styling, receive typed data and callbacks, and never call APIs. Keep each component's Storybook stories and RTL tests in its folder. Storybook's configured glob discovers these stories there. At the page level, `TradeHistoryPage` owns server state, REST/SSE orchestration, and mutations, then composes the component entries. Build and review each component in Storybook before page integration. Reserve `frontend/src/components/` for genuinely app-wide UI. Add API, hook, or utility subfolders only when related files justify them.
+Component folders and named component/view/story/test files use PascalCase; `index.tsx` is the component entry point, while feature utilities use kebab-case. Components receive typed data and callbacks; API access and feature orchestration stay in feature files and hooks. Keep a component's stories and tests beside it. `TradeHistoryPage` composes the screen and owns dialog state, while `useTradeHistory` and `useTradeEvents` own query/mutation and SSE behavior. Use the top-level `components/` directory only for UI shared across features.
 
 Use TanStack Query for server-state caching and mutations, React Context for genuinely shared client state, TanStack Table for grid interactions, and React Hook Form/Zod for forms and validation. Do not mirror query-owned trade data in Context. Continue using the Vite `/api` proxy for browser requests. Vite provides development hot module replacement; the production Dockerfile uses Nginx to serve the built static assets.
 
@@ -240,6 +315,7 @@ npm run lint
 npm run format:check
 npm test
 npm run test:all
+npm --prefix backend run test:db-integration
 ```
 
 To build the packages:
@@ -255,13 +331,13 @@ Pre-commit hooks run ESLint and Prettier on staged files. Pre-push hooks inspect
 
 ### Tool Used
 
-GitHub Copilot Chat in Visual Studio Code was used as an AI-assisted development tool.
+GitHub Copilot Chat in Visual Studio Code was used as a development aid for targeted code exploration, implementation suggestions, test and documentation updates, and debugging. It contributed to some code and test edits; the project was not produced by one-shot generation.
 
 ### How It Was Used
 
-- Copilot helped scaffold the backend and frontend, configure Docker Compose and Dev Containers, set up formatting/linting/testing workflows, and review setup decisions.
-- Backend-scoped instructions, agents, and skills under `.github/` guide future story implementation, database changes, SSE work, and code review. They document workflows; they do not mean those Phase 3 features are implemented.
+- Copilot assisted with codebase exploration, implementation and refactoring suggestions, tests, documentation, and debugging. Some resulting code and test changes were AI-assisted.
+- Reviewed suggestions against the requirements and existing code, then ran the relevant test, lint, and build checks. Responsibility for the final implementation and its acceptance remained with the author.
 
 ### Decisions Influenced by AI
 
-- To update the README with the latest development setup and AI-assisted decisions.
+Copilot helped compare implementation options and identify trade-offs. The project author defined the requirements and scope, selected the application boundaries, and made the key design decisions, including numbered pagination and cache-backed reads. Copilot helped carry out those approved decisions; it did not choose or accept them autonomously.

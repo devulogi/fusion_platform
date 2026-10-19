@@ -7,6 +7,7 @@ import { TradeRepository } from './features/trades/repositories/trade-repository
 import { TradeEventPublisher } from './features/trades/trade-event-publisher.ts';
 import { TradeService } from './features/trades/services/trade-service.ts';
 import { TradeEventsController } from './features/trades/controllers/trade-events-controller.ts';
+import { createShutdownHandler } from './server-shutdown.ts';
 
 const port = Number(process.env.PORT) || 3001;
 const prisma = new PrismaClient();
@@ -37,14 +38,20 @@ async function start(): Promise<void> {
     console.log(`Backend listening on port ${port}`);
   });
 
-  const shutdown = (): void => {
-    server.close(() => {
-      void prisma.$disconnect();
+  const shutdown = createShutdownHandler(
+    server,
+    () => tradeEventsController.closeActiveStreams(),
+    () => prisma.$disconnect(),
+  );
+  const handleShutdownSignal = (): void => {
+    void shutdown().catch((error: unknown) => {
+      console.error('Backend shutdown failed:', error);
+      process.exitCode = 1;
     });
   };
 
-  process.once('SIGINT', shutdown);
-  process.once('SIGTERM', shutdown);
+  process.on('SIGINT', handleShutdownSignal);
+  process.on('SIGTERM', handleShutdownSignal);
 }
 
 void start().catch(async (error: unknown) => {

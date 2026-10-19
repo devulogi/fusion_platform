@@ -10,6 +10,7 @@ import { TradeRepository } from '../../../../src/features/trades/repositories/tr
 import { TradeEventPublisher } from '../../../../src/features/trades/trade-event-publisher.ts';
 import { TradeService } from '../../../../src/features/trades/services/trade-service.ts';
 import { serializeTrade } from '../../../../src/features/trades/trade-serializer.ts';
+import { createShutdownHandler } from '../../../../src/server-shutdown.ts';
 
 describe('GET /api/v1/events', () => {
   it('streams canonical created, amended, and cancelled trade events', async () => {
@@ -29,24 +30,23 @@ describe('GET /api/v1/events', () => {
         unsubscribe();
       };
     });
-    const app = createApp({
-      healthController: new HealthController(),
-      tradeController: new TradeController(
-        new TradeService(
-          tradeCache,
-          new TradeRepository({
-            trade: {
-              findMany: () => Promise.resolve([]),
-              create: () => Promise.reject(new Error('Not used in SSE test')),
-              findUnique: () => Promise.resolve(null),
-              update: () => Promise.reject(new Error('Not used in SSE test')),
-            },
-          }),
-          tradeEventPublisher,
-        ),
+    const tradeEventsController = new TradeEventsController(tradeEventPublisher);
+    const healthController = new HealthController();
+    const tradeController = new TradeController(
+      new TradeService(
+        tradeCache,
+        new TradeRepository({
+          trade: {
+            findMany: () => Promise.resolve([]),
+            create: () => Promise.reject(new Error('Not used in SSE test')),
+            findUnique: () => Promise.resolve(null),
+            update: () => Promise.reject(new Error('Not used in SSE test')),
+          },
+        }),
+        tradeEventPublisher,
       ),
-      tradeEventsController: new TradeEventsController(tradeEventPublisher),
-    });
+    );
+    const app = createApp({ healthController, tradeController, tradeEventsController });
     const server = app.listen(0);
     let streamResponse: IncomingMessage | undefined;
     let reconnectedResponse: IncomingMessage | undefined;
@@ -128,6 +128,68 @@ describe('GET /api/v1/events', () => {
       });
       tradeEventPublisher.publishTradeCreated({ ...trade, id: 'reconnected-trade' });
       expect(await reconnectedEventPromise).toContain('event: trade.created\n');
+
+      let reconnectedStreamEnded = false;
+      const reconnectedStreamEndedPromise = new Promise<void>((resolve) => {
+        reconnectedResponse?.once('close', () => {
+          reconnectedStreamEnded = true;
+          resolve();
+        });
+      });
+      const disconnect = vi.fn(() => Promise.resolve());
+      const closeActiveStreams = vi.fn(() => tradeEventsController.closeActiveStreams());
+      const shutdown = createShutdownHandler(server, closeActiveStreams, disconnect);
+      const firstShutdown = shutdown();
+      const repeatedShutdown = shutdown();
+      expect(repeatedShutdown).toBe(firstShutdown);
+      expect(closeActiveStreams).toHaveBeenCalledOnce();
+      expect(unsubscribe).toHaveBeenCalledTimes(2);
+      await reconnectedStreamEndedPromise;
+      await Promise.all([firstShutdown, repeatedShutdown]);
+      expect(reconnectedStreamEnded).toBe(true);
+      expect(disconnect).toHaveBeenCalledOnce();
+      expect(unsubscribe).toHaveBeenCalledTimes(2);
+
+      const restartedEventsController = new TradeEventsController(tradeEventPublisher);
+      const restartedServer = createApp({
+        healthController,
+        tradeController,
+        tradeEventsController: restartedEventsController,
+      }).listen(0);
+      let restartedResponse: IncomingMessage | undefined;
+      try {
+        await new Promise<void>((resolve) => restartedServer.once('listening', resolve));
+        const restartedAddress = restartedServer.address();
+        if (restartedAddress === null || typeof restartedAddress === 'string') {
+          throw new Error('Restarted test server did not bind to a TCP port');
+        }
+        const restartedResponsePromise = new Promise<IncomingMessage>((resolve, reject) => {
+          const clientRequest = get(
+            { host: '127.0.0.1', port: restartedAddress.port, path: ApiPath.tradeEvents },
+            resolve,
+          );
+          clientRequest.once('error', reject);
+        });
+        restartedResponse = await restartedResponsePromise;
+        expect(restartedResponse.statusCode).toBe(200);
+        const restartedStreamClosed = new Promise<void>((resolve) => {
+          restartedResponse?.once('close', resolve);
+        });
+        restartedResponse.destroy();
+        await restartedStreamClosed;
+        await vi.waitFor(() => expect(unsubscribe).toHaveBeenCalledTimes(3));
+        expect(unsubscribe).toHaveBeenCalledTimes(3);
+
+        restartedEventsController.closeActiveStreams();
+        const refusedStreamResponse = await fetch(
+          `http://127.0.0.1:${restartedAddress.port}${ApiPath.tradeEvents}`,
+        );
+        expect(refusedStreamResponse.status).toBe(503);
+        await refusedStreamResponse.arrayBuffer();
+      } finally {
+        restartedResponse?.destroy();
+        await new Promise<void>((resolve) => restartedServer.close(() => resolve()));
+      }
     } finally {
       streamResponse?.destroy();
       reconnectedResponse?.destroy();
