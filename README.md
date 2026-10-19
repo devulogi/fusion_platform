@@ -218,8 +218,6 @@ The backend publishes `trade.created`, `trade.amended`, and `trade.cancelled` on
 
 **Concurrency and alternatives:** Amendments use an atomic active-status condition in PostgreSQL, but do not use version-based optimistic concurrency; concurrent amendments to an active trade may overwrite one another. Redis, distributed caching, and multiple services are deferred because the assessment specifies neither multi-instance scale nor a cache bottleneck. This is a single-process architecture with explicit limits, not a horizontally scaled design.
 
-The proposed backend workflows and acceptance criteria are documented in [backend/USER_STORIES.md](backend/USER_STORIES.md).
-
 ### Frontend Structure
 
 The frontend keeps app-wide setup separate from feature code. Each feature owns its page, API/schema code, hooks, tests, and reusable UI. The trade feature illustrates the convention:
