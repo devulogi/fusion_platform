@@ -5,6 +5,7 @@ import {
   readinessResponseSchema,
   serviceNotReadySchema,
   tradeCollectionNotReadySchema,
+  tradeCollectionQuerySchema,
   tradeCollectionResponseSchema,
   tradeEventStreamSchema,
   tradeIdParamsSchema,
@@ -120,78 +121,30 @@ registry.registerPath({
   method: 'get',
   path: ApiPath.trades,
   operationId: 'listTrades',
-  summary: 'List all trades',
+  summary: 'List a page of trades',
   description:
-    'Returns the complete hydrated process-local collection as { items }, without pagination, counts, or per-request database reads. Sorting and filtering are client-side.',
+    'Filters and sorts a defensive snapshot of the hydrated in-process trade cache before applying 1-based offset pagination. Symbol and trader use case-insensitive substring matching; side and status may be repeated; startDate and endDate are inclusive ISO instant bounds. The filtered total and page count are computed from the same cache snapshot. Sort fields are allow-listed and ID is always the deterministic tie-breaker. The cache is updated after writes made through this backend process; changes from external writers appear after cache rehydration.',
+  request: {
+    query: tradeCollectionQuerySchema,
+  },
   responses: {
     [HttpStatus.OK]: {
       headers: { [requestIdHeader]: requestIdResponseHeader },
-      description: 'Complete trade collection',
+      description: 'Numbered page of filtered trades',
       content: {
         'application/json': {
           schema: tradeCollectionResponseSchema,
-          example: { items: [tradeExample] },
-        },
-      },
-    },
-    [HttpStatus.SERVICE_UNAVAILABLE]: {
-      headers: { [requestIdHeader]: requestIdResponseHeader },
-      description: 'Trade collection is not ready',
-      content: {
-        'application/json': {
-          schema: tradeCollectionNotReadySchema,
-        },
-      },
-    },
-    [HttpStatus.INTERNAL_SERVER_ERROR]: {
-      headers: { [requestIdHeader]: requestIdResponseHeader },
-      description: 'Unexpected server error',
-      content: {
-        'application/json': {
-          schema: internalServerErrorSchema,
-        },
-      },
-    },
-  },
-});
-
-registry.registerPath({
-  method: 'get',
-  path: `${ApiPath.trades}/{tradeId}`,
-  operationId: 'getTradeById',
-  summary: 'Get trade by ID',
-  description: 'Returns the trade with the specified ID.',
-  request: {
-    params: tradeIdParamsSchema,
-  },
-  responses: {
-    [HttpStatus.OK]: {
-      headers: { [requestIdHeader]: requestIdResponseHeader },
-      description: 'Trade found',
-      content: {
-        'application/json': {
-          schema: tradeResponseSchema,
-          example: tradeExample,
-        },
-      },
-    },
-    [HttpStatus.NOT_FOUND]: {
-      headers: { [requestIdHeader]: requestIdResponseHeader },
-      description: 'Trade not found',
-      content: {
-        'application/json': {
-          schema: tradeNotFoundErrorSchema,
+          example: {
+            items: [tradeExample],
+            pagination: { page: 1, pageSize: 100, totalItems: 1, pageCount: 1 },
+          },
         },
       },
     },
     [HttpStatus.BAD_REQUEST]: {
       headers: { [requestIdHeader]: requestIdResponseHeader },
-      description: 'Trade ID validation failed',
-      content: {
-        'application/json': {
-          schema: validationErrorSchema,
-        },
-      },
+      description: 'Query validation failed',
+      content: { 'application/json': { schema: validationErrorSchema } },
     },
     [HttpStatus.SERVICE_UNAVAILABLE]: {
       headers: { [requestIdHeader]: requestIdResponseHeader },

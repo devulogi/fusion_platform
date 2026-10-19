@@ -1,16 +1,12 @@
 import { flexRender } from '@tanstack/react-table';
-import type { Row, Table } from '@tanstack/react-table';
+import type { Table } from '@tanstack/react-table';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
-import type { ReactNode } from 'react';
 import type { Trade } from '../../trade-schema';
 
 type TradeBlotterTableViewProps = {
   table: Table<Trade>;
-  rows: Row<Trade>[];
-  hasTrades: boolean;
   isLoading: boolean;
   emptyMessage: string;
-  pagination: ReactNode;
 };
 
 const columnLabels: Record<string, string> = {
@@ -33,13 +29,11 @@ const columnWidths: Record<string, string> = {
 
 export default function TradeBlotterTableView({
   table,
-  rows,
-  hasTrades,
   isLoading,
   emptyMessage,
-  pagination,
 }: TradeBlotterTableViewProps) {
   const columns = table.getVisibleLeafColumns();
+  const rows = table.getRowModel().rows;
 
   return (
     <div className="border-x border-b border-[var(--trade-border)] bg-white">
@@ -129,9 +123,7 @@ export default function TradeBlotterTableView({
                   className="px-4 py-10 text-center text-[var(--trade-muted)]"
                   colSpan={columns.length}
                 >
-                  <span role="status">
-                    {hasTrades ? 'No trades match these filters' : emptyMessage}
-                  </span>
+                  <span role="status">{emptyMessage}</span>
                 </td>
               </tr>
             ) : (
@@ -160,7 +152,6 @@ export default function TradeBlotterTableView({
           </tbody>
         </table>
       </div>
-      {pagination}
     </div>
   );
 }

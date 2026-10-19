@@ -68,7 +68,6 @@ describe('API documentation', () => {
           post: { operationId: 'createTrade' },
         },
         [`${ApiPath.trades}/{tradeId}`]: {
-          get: { operationId: 'getTradeById' },
           patch: { operationId: 'amendOrCancelTrade' },
         },
         [ApiPath.health]: { get: { operationId: 'checkLiveness' } },
@@ -76,6 +75,7 @@ describe('API documentation', () => {
         [ApiPath.tradeEvents]: { get: { operationId: 'subscribeTradeEvents' } },
       },
     });
+    expect(document.getIn(['paths', `${ApiPath.trades}/{tradeId}`, 'get'])).toBeUndefined();
 
     const description = z
       .string()
@@ -165,18 +165,6 @@ describe('API documentation', () => {
     expect(document.getIn(['paths', ApiPath.trades, 'get', 'responses', '200'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'get', 'responses', '503'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'get', 'responses', '500'])).toBeDefined();
-    expect(
-      document.getIn(['paths', `${ApiPath.trades}/{tradeId}`, 'get', 'parameters']),
-    ).toBeDefined();
-    expect(
-      document.getIn(['paths', `${ApiPath.trades}/{tradeId}`, 'get', 'responses', '200']),
-    ).toBeDefined();
-    expect(
-      document.getIn(['paths', `${ApiPath.trades}/{tradeId}`, 'get', 'responses', '400']),
-    ).toBeDefined();
-    expect(
-      document.getIn(['paths', `${ApiPath.trades}/{tradeId}`, 'get', 'responses', '404']),
-    ).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'post', 'requestBody'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'post', 'responses', '201'])).toBeDefined();
     expect(document.getIn(['paths', ApiPath.trades, 'post', 'requestBody'])).toBeDefined();
@@ -224,13 +212,6 @@ describe('API documentation', () => {
       ]),
     ).toBeDefined();
     expect(document.getIn(['components', 'schemas', 'Trade'])).toBeDefined();
-    expect(document.toJS()).toMatchObject({
-      components: {
-        schemas: {
-          TradeCollectionResponse: { required: ['items'] },
-        },
-      },
-    });
     expect(
       document.getIn([
         'components',
@@ -239,7 +220,35 @@ describe('API documentation', () => {
         'properties',
         'pagination',
       ]),
-    ).toBeUndefined();
+    ).toBeDefined();
+    expect(document.toJS()).toMatchObject({
+      components: {
+        schemas: {
+          TradeCollectionResponse: { required: ['items', 'pagination'] },
+        },
+      },
+    });
+    const documentValue: unknown = document.toJS();
+    const documentObject = z.record(z.unknown()).parse(documentValue);
+    const paths = z.record(z.unknown()).parse(documentObject.paths);
+    const tradesPath = z.record(z.unknown()).parse(paths[ApiPath.trades]);
+    const getOperation = z.record(z.unknown()).parse(tradesPath.get);
+    const tradeQueryParameters = z.array(z.record(z.unknown())).parse(getOperation.parameters);
+    expect(tradeQueryParameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'page', in: 'query' }),
+        expect.objectContaining({ name: 'pageSize', in: 'query' }),
+        expect.objectContaining({ name: 'sortBy', in: 'query' }),
+        expect.objectContaining({ name: 'sortDirection', in: 'query' }),
+        expect.objectContaining({ name: 'symbol', in: 'query' }),
+        expect.objectContaining({ name: 'trader', in: 'query' }),
+        expect.objectContaining({ name: 'side', in: 'query' }),
+        expect.objectContaining({ name: 'status', in: 'query' }),
+        expect.objectContaining({ name: 'startDate', in: 'query' }),
+        expect.objectContaining({ name: 'endDate', in: 'query' }),
+      ]),
+    );
+    expect(document.getIn(['paths', ApiPath.trades, 'get', 'responses', '400'])).toBeDefined();
     expect(
       document.getIn([
         'components',

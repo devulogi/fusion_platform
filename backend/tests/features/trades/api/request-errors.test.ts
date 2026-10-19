@@ -9,7 +9,7 @@ import {
   routeNotFoundSchema,
   validationErrorSchema,
 } from '../../../../src/schemas.ts';
-import { ApiPath } from '../../../../src/constants.ts';
+import { ApiPath, DEFAULT_TRADE_PAGE_SIZE } from '../../../../src/constants.ts';
 import { HealthController } from '../../../../src/features/health/controllers/health-controller.ts';
 import { TradeController } from '../../../../src/features/trades/controllers/trade-controller.ts';
 import { TradeEventsController } from '../../../../src/features/trades/controllers/trade-events-controller.ts';
@@ -128,7 +128,15 @@ describe('Request errors and traceability', () => {
     const second = await request(app).get(ApiPath.trades);
     const requestId = z.string().uuid().parse(first.headers['x-request-id']);
 
-    expect(first.body).toEqual({ items: [] });
+    expect(first.body).toEqual({
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: DEFAULT_TRADE_PAGE_SIZE,
+        totalItems: 0,
+        pageCount: 0,
+      },
+    });
     expect(second.headers['x-request-id']).not.toBe(requestId);
     expect(getRequestLogAt(records)).toMatchObject({
       requestId,

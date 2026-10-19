@@ -4,6 +4,10 @@ import CreateTradeDialog from './index';
 const meta = {
   title: 'Trade History/CreateTradeDialog',
   component: CreateTradeDialog,
+  parameters: {
+    layout: 'fullscreen',
+    docs: { story: { inline: false, iframeHeight: '640px' } },
+  },
   args: {
     open: true,
     isPending: false,

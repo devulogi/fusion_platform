@@ -1,32 +1,36 @@
-import { useMemo, useState } from 'react';
-import {
-  createColumnHelper,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getSortedRowModel,
-  useReactTable,
-} from '@tanstack/react-table';
-import type { ColumnFiltersState, SortingState } from '@tanstack/react-table';
+import { useMemo } from 'react';
+import { createColumnHelper, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import type { SortingState, Updater } from '@tanstack/react-table';
 import TradeFilterToolbar from '../TradeFilterToolbar';
-import { emptyAdvancedTradeFilters } from '../TradeFilterToolbar/types';
 import type { AdvancedTradeFilters } from '../TradeFilterToolbar/types';
-import TradePagination from '../TradePagination';
 import TradeRowActions from '../TradeRowActions';
 import TradeStatusBadge from '../TradeStatusBadge';
 import TradeBlotterTableView from './TradeBlotterTableView';
 import type { Trade } from '../../trade-schema';
+import type { TradeSortBy, TradeSortDirection } from '../../trade-schema';
+import TradePagination from '../TradePagination';
+import type { TradePaginationProps } from '../TradePagination';
 
 type TradeBlotterTableProps = {
   trades: Trade[];
   isLoading: boolean;
   emptyMessage: string;
   actionsDisabled: boolean;
+  symbol: string;
+  filters: AdvancedTradeFilters;
+  activeFilterCount: number;
+  sortBy: TradeSortBy;
+  sortDirection: TradeSortDirection;
+  pagination: Omit<TradePaginationProps, 'onPageChange'>;
+  onPageChange: TradePaginationProps['onPageChange'];
+  onSymbolChange: (value: string) => void;
+  onFiltersApply: (filters: AdvancedTradeFilters) => void;
+  onSortChange: (sortBy: TradeSortBy, sortDirection: TradeSortDirection) => void;
   onAmend: (trade: Trade) => void;
   onCancel: (trade: Trade) => void;
 };
 
 const columnHelper = createColumnHelper<Trade>();
-const PAGE_SIZE = 100;
 
 function createTradeColumns(
   actionsDisabled: boolean,
@@ -42,7 +46,16 @@ function createTradeColumns(
           <div className="group flex min-w-0 items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="truncate font-semibold text-[var(--trade-text)]">
-                {trade.symbol} <span className="text-[var(--trade-accent)]">· {trade.side}</span>
+                {trade.symbol}{' '}
+                <span
+                  className={
+                    trade.side === 'BUY'
+                      ? 'text-[var(--trade-active-text)]'
+                      : 'text-[var(--trade-cancelled-text)]'
+                  }
+                >
+                  · {trade.side}
+                </span>
               </p>
               <p className="truncate text-xs text-[var(--trade-muted)]">{trade.trader}</p>
             </div>
@@ -54,6 +67,14 @@ function createTradeColumns(
       id: 'dateTime',
       header: 'Date & Time',
       cell: ({ getValue }) => formatTradeTimestamp(getValue()),
+    }),
+    columnHelper.accessor('trader', {
+      id: 'trader',
+      header: 'Trader filter',
+    }),
+    columnHelper.accessor('side', {
+      id: 'side',
+      header: 'Side filter',
     }),
     columnHelper.accessor('quantity', {
       header: 'Quantity',
@@ -104,31 +125,27 @@ function formatTradeTimestamp(timestamp: string): string {
   return `${dateText} · ${timeText}`;
 }
 
-function toLocalDateValue(timestamp: string): string {
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return '';
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 export default function TradeBlotterTable({
   trades,
   isLoading,
   emptyMessage,
   actionsDisabled,
+  symbol,
+  filters,
+  activeFilterCount,
+  sortBy,
+  sortDirection,
+  pagination,
+  onPageChange,
+  onSymbolChange,
+  onFiltersApply,
+  onSortChange,
   onAmend,
   onCancel,
 }: TradeBlotterTableProps) {
-  const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [pageIndex, setPageIndex] = useState(0);
-  const [advancedFilters, setAdvancedFilters] = useState<AdvancedTradeFilters>({
-    ...emptyAdvancedTradeFilters,
-    sides: [],
-    statuses: [],
-  });
+  const sorting: SortingState = [
+    { id: sortBy === 'tradeTimestamp' ? 'dateTime' : sortBy, desc: sortDirection === 'desc' },
+  ];
   const columns = useMemo(
     () => createTradeColumns(actionsDisabled, onAmend, onCancel),
     [actionsDisabled, onAmend, onCancel],
@@ -137,74 +154,45 @@ export default function TradeBlotterTable({
     data: trades,
     columns,
     getRowId: (trade) => trade.id,
-    state: { sorting, columnFilters },
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
+    state: { sorting },
+    initialState: { columnVisibility: { trader: false, side: false } },
+    onSortingChange: (updater: Updater<SortingState>) => {
+      const nextSorting = typeof updater === 'function' ? updater(sorting) : updater;
+      const selected = nextSorting[0];
+      const selectedSortBy = selected?.id === 'dateTime' ? 'tradeTimestamp' : selected?.id;
+      const allowedSorts: TradeSortBy[] = [
+        'symbol',
+        'tradeTimestamp',
+        'quantity',
+        'price',
+        'trader',
+        'side',
+        'status',
+      ];
+      onSortChange(
+        allowedSorts.includes(selectedSortBy as TradeSortBy)
+          ? (selectedSortBy as TradeSortBy)
+          : 'tradeTimestamp',
+        selected ? (selected.desc ? 'desc' : 'asc') : 'desc',
+      );
+    },
     getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getSortedRowModel: getSortedRowModel(),
+    manualSorting: true,
+    enableMultiSort: false,
+    sortDescFirst: false,
   });
-  const getStringFilterValue = (columnId: string): string => {
-    const value = table.getColumn(columnId)?.getFilterValue();
-    return typeof value === 'string' ? value : '';
-  };
-  const filteredRows = table.getRowModel().rows.filter(({ original: trade }) => {
-    const traderMatches = trade.trader
-      .toLocaleLowerCase()
-      .includes(advancedFilters.trader.trim().toLocaleLowerCase());
-    const sideMatches =
-      advancedFilters.sides.length === 0 || advancedFilters.sides.includes(trade.side);
-    const statusMatches =
-      advancedFilters.statuses.length === 0 || advancedFilters.statuses.includes(trade.status);
-    const tradeDate = toLocalDateValue(trade.tradeTimestamp);
-    const startDateMatches = !advancedFilters.startDate || tradeDate >= advancedFilters.startDate;
-    const endDateMatches = !advancedFilters.endDate || tradeDate <= advancedFilters.endDate;
-    return traderMatches && sideMatches && statusMatches && startDateMatches && endDateMatches;
-  });
-  const activeFilterCount =
-    Number(getStringFilterValue('symbol') !== '') +
-    Number(advancedFilters.trader.trim() !== '') +
-    Number(advancedFilters.startDate !== '' || advancedFilters.endDate !== '') +
-    Number(advancedFilters.sides.length > 0) +
-    Number(advancedFilters.statuses.length > 0);
-  const pageCount = Math.ceil(filteredRows.length / PAGE_SIZE);
-  const currentPageIndex = Math.min(pageIndex, Math.max(pageCount - 1, 0));
-  const pageRows = filteredRows.slice(
-    currentPageIndex * PAGE_SIZE,
-    (currentPageIndex + 1) * PAGE_SIZE,
-  );
-
   return (
     <div>
       <TradeFilterToolbar
-        symbol={getStringFilterValue('symbol')}
-        filters={advancedFilters}
+        symbol={symbol}
+        filters={filters}
         activeFilterCount={activeFilterCount}
-        onSymbolChange={(value) => {
-          setPageIndex(0);
-          table.getColumn('symbol')?.setFilterValue(value);
-        }}
-        onApply={(filters) => {
-          setPageIndex(0);
-          setAdvancedFilters(filters);
-        }}
+        onSymbolChange={onSymbolChange}
+        onApply={onFiltersApply}
       />
 
-      <TradeBlotterTableView
-        table={table}
-        rows={pageRows}
-        hasTrades={trades.length > 0}
-        isLoading={isLoading}
-        emptyMessage={emptyMessage}
-        pagination={
-          <TradePagination
-            pageIndex={currentPageIndex}
-            pageSize={PAGE_SIZE}
-            totalItems={filteredRows.length}
-            onPageChange={setPageIndex}
-          />
-        }
-      />
+      <TradeBlotterTableView table={table} isLoading={isLoading} emptyMessage={emptyMessage} />
+      <TradePagination {...pagination} onPageChange={onPageChange} />
     </div>
   );
 }

@@ -17,6 +17,8 @@ tools:
     search,
     web,
     "postgresql-mcp/*",
+    agent,
+    agent/runSubagent,
   ]
 user-invocable: true
 ---

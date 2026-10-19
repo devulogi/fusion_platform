@@ -18,32 +18,77 @@ const unusedTradeRepository: TradeRepositoryContract = {
 };
 
 describe('TradeService', () => {
-  it('throws when the cache has not been hydrated', () => {
+  it('throws when the cache has not been hydrated before a page query', () => {
     const service = new TradeService(
       new TradeCache(),
       unusedTradeRepository,
       new TradeEventPublisher(),
     );
 
-    expect(() => service.getAllTrades()).toThrow(TradeCacheNotHydratedError);
+    expect(() => service.getTradePage({})).toThrow(TradeCacheNotHydratedError);
   });
 
-  it('returns the cached collection after hydration', () => {
+  it('filters, sorts, and pages a cache snapshot without mutating it or reading the repository', () => {
+    const cachedTrades: Trade[] = [
+      {
+        id: 'trade-1',
+        symbol: 'AAPL',
+        quantity: 100,
+        price: 185.25,
+        side: 'BUY',
+        trader: 'Alex Morgan',
+        tradeTimestamp: '2026-10-14T12:00:00.000Z',
+        status: 'ACTIVE',
+      },
+      {
+        id: 'trade-2',
+        symbol: 'AAPL',
+        quantity: 200,
+        price: 186.25,
+        side: 'SELL',
+        trader: 'Alex Morgan',
+        tradeTimestamp: '2026-10-14T13:00:00.000Z',
+        status: 'ACTIVE',
+      },
+      {
+        id: 'trade-3',
+        symbol: 'MSFT',
+        quantity: 300,
+        price: 420.5,
+        side: 'BUY',
+        trader: 'Sam Lee',
+        tradeTimestamp: '2026-10-14T14:00:00.000Z',
+        status: 'CANCELLED',
+      },
+    ];
     const tradeCache = new TradeCache();
-    const trade = {
-      id: 'trade-1',
-      symbol: 'AAPL',
-      quantity: 100,
-      price: 185.25,
-      side: 'BUY' as const,
-      trader: 'Alex Morgan',
-      tradeTimestamp: '2026-10-14T12:00:00.000Z',
-      status: 'ACTIVE' as const,
-    };
-    tradeCache.hydrate([trade]);
-    const service = new TradeService(tradeCache, unusedTradeRepository, new TradeEventPublisher());
+    tradeCache.hydrate(cachedTrades);
+    const findAll = vi.fn<TradeRepositoryContract['findAll']>().mockResolvedValue([]);
+    const service = new TradeService(
+      tradeCache,
+      { ...unusedTradeRepository, findAll },
+      new TradeEventPublisher(),
+    );
 
-    expect(service.getAllTrades()).toEqual([trade]);
+    expect(
+      service.getTradePage({
+        page: 2,
+        pageSize: 1,
+        sortBy: 'tradeTimestamp',
+        sortDirection: 'asc',
+        symbol: 'aap',
+        trader: 'alex',
+        side: ['BUY', 'SELL'],
+        status: ['ACTIVE'],
+        startDate: '2026-10-14T00:00:00.000Z',
+        endDate: '2026-10-15T00:00:00.000Z',
+      }),
+    ).toEqual({
+      items: [cachedTrades[1]],
+      pagination: { page: 2, pageSize: 1, totalItems: 2, pageCount: 2 },
+    });
+    expect(findAll).not.toHaveBeenCalled();
+    expect(tradeCache.getAll()).toEqual(cachedTrades);
   });
 
   it('persists, updates the cache, then publishes the saved trade', async () => {
@@ -405,12 +450,11 @@ describe('TradeService', () => {
       status: 'ACTIVE' as const,
     };
     cache.hydrate([original]);
-    const service = new TradeService(cache, unusedTradeRepository, new TradeEventPublisher());
     original.symbol = 'CHANGED';
-    const returned = service.getAllTrades()[0];
+    const returned = cache.getAll()[0];
     if (returned === undefined) throw new Error('Expected a cached trade');
     Object.assign(returned, { symbol: 'CHANGED' });
 
-    expect(service.getAllTrades()[0]?.symbol).toBe('AAPL');
+    expect(cache.getAll()[0]?.symbol).toBe('AAPL');
   });
 });

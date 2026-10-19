@@ -17,13 +17,17 @@ const persistedTrade: PersistedTrade = {
   counterparty: null,
 };
 
+function createRepository(database: TradeWriteDatabase): TradeRepository {
+  return new TradeRepository(database);
+}
+
 describe('TradeRepository', () => {
   it('maps persisted records to domain trades', async () => {
     const findMany = vi
       .fn<TradeWriteDatabase['trade']['findMany']>()
       .mockResolvedValue([persistedTrade]);
     const create = vi.fn<TradeWriteDatabase['trade']['create']>();
-    const repository = new TradeRepository({
+    const repository = createRepository({
       trade: {
         findMany,
         create,
@@ -52,7 +56,7 @@ describe('TradeRepository', () => {
       .fn<TradeWriteDatabase['trade']['findMany']>()
       .mockRejectedValue(databaseError);
     const create = vi.fn<TradeWriteDatabase['trade']['create']>();
-    const repository = new TradeRepository({
+    const repository = createRepository({
       trade: {
         findMany,
         create,
@@ -69,7 +73,7 @@ describe('TradeRepository', () => {
       .fn<TradeWriteDatabase['trade']['create']>()
       .mockResolvedValue({ ...persistedTrade, id: 'generated-id' });
     const findMany = vi.fn<TradeWriteDatabase['trade']['findMany']>().mockResolvedValue([]);
-    const repository = new TradeRepository({
+    const repository = createRepository({
       trade: {
         findMany,
         create,
@@ -107,7 +111,7 @@ describe('TradeRepository', () => {
     const failure = new Error('Database unavailable');
     const create = vi.fn<TradeWriteDatabase['trade']['create']>().mockRejectedValue(failure);
     const findMany = vi.fn<TradeWriteDatabase['trade']['findMany']>();
-    const repository = new TradeRepository({
+    const repository = createRepository({
       trade: {
         findMany,
         create,
@@ -138,7 +142,7 @@ describe('TradeRepository', () => {
       book: 'EQUITIES_US',
     };
     const update = vi.fn().mockResolvedValue(updatedTrade);
-    const repository = new TradeRepository({
+    const repository = createRepository({
       trade: {
         findMany: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn().mockResolvedValue(persistedTrade),
@@ -181,7 +185,7 @@ describe('TradeRepository', () => {
       clientVersion: 'test',
     });
     const findUnique = vi.fn<TradeWriteDatabase['trade']['findUnique']>().mockResolvedValue(null);
-    const repository = new TradeRepository({
+    const repository = createRepository({
       trade: {
         findMany: vi.fn<TradeWriteDatabase['trade']['findMany']>().mockResolvedValue([]),
         findUnique,
@@ -204,7 +208,7 @@ describe('TradeRepository', () => {
     const findUnique = vi
       .fn<TradeWriteDatabase['trade']['findUnique']>()
       .mockResolvedValue({ ...persistedTrade, status: 'CANCELLED' });
-    const repository = new TradeRepository({
+    const repository = createRepository({
       trade: {
         findMany: vi.fn<TradeWriteDatabase['trade']['findMany']>().mockResolvedValue([]),
         findUnique,
@@ -222,7 +226,7 @@ describe('TradeRepository', () => {
   it('conditionally cancels an active trade and returns the canonical row', async () => {
     const cancelledTrade: PersistedTrade = { ...persistedTrade, status: 'CANCELLED' };
     const update = vi.fn<TradeWriteDatabase['trade']['update']>().mockResolvedValue(cancelledTrade);
-    const repository = new TradeRepository({
+    const repository = createRepository({
       trade: {
         findMany: vi.fn<TradeWriteDatabase['trade']['findMany']>().mockResolvedValue([]),
         findUnique: vi.fn<TradeWriteDatabase['trade']['findUnique']>().mockResolvedValue(null),
@@ -259,7 +263,7 @@ describe('TradeRepository', () => {
     const findUnique = vi
       .fn<TradeWriteDatabase['trade']['findUnique']>()
       .mockResolvedValue(cancelledTrade);
-    const repository = new TradeRepository({
+    const repository = createRepository({
       trade: {
         findMany: vi.fn<TradeWriteDatabase['trade']['findMany']>().mockResolvedValue([]),
         findUnique,
@@ -289,7 +293,7 @@ describe('TradeRepository', () => {
       code: 'P2025',
       clientVersion: 'test',
     });
-    const repository = new TradeRepository({
+    const repository = createRepository({
       trade: {
         findMany: vi.fn<TradeWriteDatabase['trade']['findMany']>().mockResolvedValue([]),
         findUnique: vi.fn<TradeWriteDatabase['trade']['findUnique']>().mockResolvedValue(null),

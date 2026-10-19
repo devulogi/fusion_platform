@@ -18,6 +18,10 @@ const trade: Trade = {
 const meta = {
   title: 'Trade History/CancelTradeDialog',
   component: CancelTradeDialog,
+  parameters: {
+    layout: 'fullscreen',
+    docs: { story: { inline: false, iframeHeight: '640px' } },
+  },
   args: {
     open: true,
     trade,

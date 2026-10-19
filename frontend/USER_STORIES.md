@@ -13,7 +13,7 @@ These stories translate the full-stack take-home assessment into frontend workfl
 - The frontend uses React, TypeScript, Vite, Tailwind CSS, TanStack Table, TanStack Query, React Hook Form, and Zod.
 - The browser uses the Vite `/api` proxy for backend calls and the backend's REST/SSE contracts; it never connects directly to PostgreSQL.
 - TanStack Query owns server state for the trade snapshot. React Context is reserved for client state genuinely shared across components, such as SSE connection status. Component-local state owns form drafts and transient UI state.
-- REST responses are authoritative for the initiating action; SSE delivers committed changes to other connected clients. Applying the same trade from both paths must upsert by trade ID rather than create duplicates.
+- REST mutation responses are canonical. After successful mutations and valid SSE events, the frontend refetches the active server query so page membership, ordering, and counts remain accurate.
 - The assessment's required core model is `id`, `symbol`, `quantity`, `price`, `side`, `trader`, `tradeTimestamp`, and `status`. The sample's `book` and `counterparty` fields may also be shown when present.
 - Cancellation is terminal in the backend contract. Do not send `{ "status": "ACTIVE" }` to undo cancellation or expose a direct Reactivate action.
 - Storybook is configured for reusable component exploration. MSW and Playwright are not configured; request approval before adding their dependencies or project setup.
@@ -28,8 +28,8 @@ As a blotter user, I want to see persisted trades in a readable table so I can r
 
 **Acceptance criteria**
 
-- When the SSE connection opens, the frontend fetches `GET /api/v1/trades` and renders the returned `{ items }` collection.
-- The stream is established before the initial snapshot request. Events received while the request is in flight are reconciled over the snapshot.
+- When the SSE connection opens, the frontend fetches page 1 from `GET /api/v1/trades` and renders `{ items, pagination }`.
+- The stream is established before the initial page request. Events received while a request is in flight trigger a follow-up refresh of the active query.
 - Rows clearly identify their trade and display the assessment's important fields: symbol, side, quantity, price, trader, trade date, and status. Optional `book` and `counterparty` fields are displayed when the UI has an appropriate layout for them.
 - Loading, empty, and snapshot-error states are communicated clearly without exposing internal errors.
 - The layout remains usable at narrow viewport widths; essential information and row actions are not silently lost.
@@ -48,10 +48,10 @@ As a blotter user, I want to sort, filter, and refresh the collection so I can f
 - Users can search by symbol and open the Filters dialog for trader, date range, side, and status criteria.
 - Users can reset all filter drafts, cancel without applying, and see how many criteria are active.
 - A refresh action refetches the collection through TanStack Query and presents pending/error feedback without losing the last successful snapshot.
-- Sorting and filtering are client-side for the assessment-sized collection; they do not change the server contract or add pagination.
+- Sorting, filters, and numbered pagination are sent to the server and apply to the complete cached result set. The UI renders the returned page and filtered `totalItems`/`pageCount` metadata.
 - Sorting/filtering controls work by keyboard and expose their state accessibly.
 
-**Implementation:** TanStack Table sorts supported columns. Symbol search applies immediately; trader/date/side/status filters are edited in a dialog and applied client-side, without changing the backend contract. Apply commits the draft, Cancel discards it, and Reset all clears it. A refresh button refetches through TanStack Query, displays pending/error feedback, remains available during SSE reconnects after the first snapshot, and retains the last successful data if refresh fails.
+**Implementation:** TanStack Table controls supported sort state and the Filter dialog collects symbol, trader, date, side, and status criteria; those values are sent as validated query parameters. Apply commits the draft, Cancel discards it, and Reset all clears it. Changing a filter or sort resets to page 1. The numbered pagination controls use the server's filtered counts. A refresh action refetches the current query, displays pending/error feedback, remains available during SSE reconnects after the first snapshot, and retains the last successful page if refresh fails.
 
 ### 3. Create a trade
 
@@ -64,10 +64,10 @@ As a trader, I want to create a trade so it is persisted and appears in the blot
 - A clearly located create action opens a labelled form with the required trade fields.
 - Validate inputs with the existing Zod contract before submission. Show field-level, accessible errors and retain user input after validation or request failure.
 - Submit through `POST /api/v1/trades`; prevent accidental duplicate submission while the request is pending.
-- On success, close/reset the form and update the TanStack Query cache from the canonical response. A matching SSE event must not create a duplicate row.
+- On success, close/reset the form and refetch the active numbered query. A matching SSE event must not leave duplicate or stale rows.
 - On failure, keep the form recoverable and show a safe, actionable message.
 
-**Implementation:** The blotter's New trade action opens a validated dialog. Required fields, including status, are explicit; optional book and counterparty are supported. The form submits through REST, disables duplicate submission while pending, updates the Query cache from the saved response, and preserves the draft with a safe message on failure. RTL covers validation, payload shape, pending state, and recovery.
+**Implementation:** The blotter's New trade action opens a validated dialog. Required fields, including status, are explicit; optional book and counterparty are supported. The form submits through REST, disables duplicate submission while pending, refetches the active numbered query after success, and preserves the draft with a safe message on failure. RTL covers validation, payload shape, pending state, and recovery.
 
 ### 4. Amend a trade
 
@@ -81,10 +81,10 @@ As a trader, I want to amend an active trade so corrected details are persisted 
 - Only fields allowed by the PATCH contract are editable; the ID and status are not submitted as amendment fields.
 - Validate before sending and show field-level errors without discarding the draft.
 - Submit the amendment to `PATCH /api/v1/trades/{tradeId}`. Disable duplicate submission while pending.
-- On success, update the query cache from the canonical trade response; the corresponding SSE event upserts the same trade.
+- On success, refetch the active numbered query; the corresponding SSE event also refreshes that query rather than upserting into a potentially stale page.
 - Show safe feedback for not-found, not-amendable, validation, and unexpected errors. Do not expose raw server details.
 
-**Implementation:** Active rows expose an amend action that opens a prepopulated dialog. It submits only editable fields to the existing PATCH endpoint, updates the Query cache from the canonical response, and leaves the draft available after safe error feedback. RTL verifies prepopulation, validation, payload exclusions, pending state, and failure recovery.
+**Implementation:** Active rows expose an amend action that opens a prepopulated dialog. It submits only editable fields to the existing PATCH endpoint, refetches the active numbered query after success, and leaves the draft available after safe error feedback. RTL verifies prepopulation, validation, payload exclusions, pending state, and failure recovery.
 
 ### 5. Cancel a trade
 
@@ -96,11 +96,11 @@ As a trader, I want to cancel an active trade without deleting it so its status 
 
 - A cancel action is available for an active row and requires confirmation before sending.
 - Submit the assessment's cancellation command `{ "status": "CANCELLED" }` to `PATCH /api/v1/trades/{tradeId}`.
-- On success, retain the row and update its status from the canonical response; the matching SSE event must not duplicate it.
+- On success, retain the trade and refetch the active numbered query; the matching SSE event must not leave duplicate or stale rows.
 - Prevent duplicate submission while pending and show safe feedback when cancellation fails.
 - A cancelled trade has no row-level action to directly return it to `ACTIVE`; the frontend must not send `{ "status": "ACTIVE" }` as an undo command.
 
-**Implementation:** Active rows expose a confirmation dialog that states cancellation will not delete the trade. Confirm sends `{ "status": "CANCELLED" }` through PATCH; the canonical response updates the Query cache and the matching SSE event upserts the same row. Cancelled rows expose no actions. Pending state prevents duplicate confirmation; errors retain a retry path. RTL covers confirmation content, payload, pending state, success close, and failure recovery.
+**Implementation:** Active rows expose a confirmation dialog that states cancellation will not delete the trade. Confirm sends `{ "status": "CANCELLED" }` through PATCH; successful cancellation refetches the active numbered query. Cancelled rows expose no actions. Pending state prevents duplicate confirmation; errors retain a retry path. RTL covers confirmation content, payload, pending state, success close, and failure recovery.
 
 ### 6. Receive live trade updates
 
@@ -112,7 +112,7 @@ As a connected blotter user, I want committed changes from other clients to appe
 
 - Connect to `GET /api/v1/events` using native `EventSource` and show the connection state accessibly.
 - Handle `trade.created`, `trade.amended`, and `trade.cancelled` payloads as untrusted input; ignore malformed events.
-- Upsert valid trades into the TanStack Query cache by ID. Events arriving during a snapshot fetch are buffered and reconciled over the snapshot.
+- Validate supported events and refetch the active server query; do not manually upsert into a partial page.
 - Close the stream when the app unmounts. After automatic reconnect, refetch the snapshot because this backend has no durable event replay or event IDs.
 - Connection loss/recovery is visible without blocking access to the last successful snapshot.
 
@@ -130,9 +130,9 @@ As a blotter user, I want the existing assessment workflows to use the supplied 
 - Keep the current assessment actions and refresh behavior. Do not add navigation destinations or controls without an implemented workflow.
 - Keep symbol search inline; put trader, inclusive local-date range, side, and status criteria in the Filters dialog. Show the number of active criteria.
 - Apply commits the filter draft; Cancel and Escape discard it; Reset all clears symbol search and advanced filters.
-- Use the reference columns: selection checkbox, composite Trade (symbol/side with trader secondary), Date & Time, Quantity, Price, Status, and Actions. Do not display Trade ID, Book, or Counterparty as columns.
+- Use the reference columns: composite Trade (symbol/side with trader secondary), Date & Time, Quantity, Price, Status, and Actions. Do not display Trade ID, Book, or Counterparty as columns.
 - Keep create/amend/cancel and refresh workflows. Active trades expose Amend and Cancel through the dedicated Actions menu; cancelled trades have no actions. Status is text-labelled and not communicated by color alone.
-- Row checkboxes select locally only; do not invent bulk actions. Do not add CSV export, side tabs, or pagination.
+- Keep numbered pagination with result range and filtered total. Do not add CSV export, side tabs, or bulk-selection actions.
 - Use only fields supplied by the API. Do not present `counterparty` as issuer/company metadata.
 
 **Components and Storybook work**
@@ -140,7 +140,7 @@ As a blotter user, I want the existing assessment workflows to use the supplied 
 - `TradeStatusBadge`: reusable Active/Cancelled variants. Stories cover both variants; RTL verifies visible labels and semantic styling.
 - `TradeFilterToolbar`: symbol search plus a staged Filter Trades dialog with manual date range, side/status checkboxes, trader, Reset all, Cancel, and Apply Filters. Stories cover closed, open, and active-filter states; RTL verifies manual dates, draft/apply/cancel/reset, keyboard close/focus, and accessible controls.
 - `TradeRowActions`: three-dot row menu for Amend and Cancel trade. Stories cover collapsed, open, and disabled states; RTL verifies callbacks, Escape/outside dismissal, focus restoration, and disabled behavior.
-- `TradeBlotterTable`: reference columns, local row selection, sortable composite Trade cell, dedicated Actions column, status badge, and loading/empty states. Stories cover populated, loading, and empty; RTL covers sorting, selection, filtering, and row-action integration.
+- `TradeBlotterTable`: reference columns, sortable composite Trade cell, dedicated Actions column, status badge, and loading/empty states. Stories cover populated, loading, and empty; RTL covers sorting, filtering, and row-action integration.
 - Existing create, amend, and cancel dialogs retain their validated REST workflows and receive the reference palette.
 
 **Tests and validation**

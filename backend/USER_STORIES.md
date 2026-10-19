@@ -6,7 +6,7 @@ These stories translate the take-home requirements into backend behavior. Implem
 
 ## Scope and Assumptions
 
-- The API returns the full trade collection as `{ items }`, expected to contain approximately 100–1,000 records. Sorting and filtering are client-side; redundant counts and pagination metadata are omitted.
+- `GET /api/v1/trades` returns a numbered page as `{ items, pagination }` over an expected 100–1,000 cached trades. Filtering, sorting, filtered counts, and pagination run server-side against a defensive cache snapshot; the request does not query PostgreSQL.
 - PostgreSQL is the system of record. A process-local `Map<TradeId, Trade>` is a disposable read cache and is hydrated from the database.
 - Clients send create, amend, and cancel commands through REST. Server-to-client changes are delivered over SSE.
 - The persisted trade contract uses the assessment's required fields: ID, symbol, side, quantity, price, trader, trade timestamp, and status. Book and counterparty are optional sample-data fields.
@@ -39,11 +39,12 @@ As a blotter user, I want to retrieve the current trades so the frontend can dis
 
 **Acceptance criteria**
 
-- `GET /api/v1/trades` returns `{ items }` with HTTP `200`; it returns the complete collection in one response without server-side paging or metadata.
+- `GET /api/v1/trades` returns `{ items, pagination }` with HTTP `200`. It validates filters, sort, and numbered pagination, applying them to a defensive snapshot of the hydrated in-process cache without a per-request database read.
 - Before the API reports ready, startup loads the persisted collection from PostgreSQL and populates the cache.
 - A request is not served from an uninitialized or partially populated cache.
-- Once ready, `GET /api/v1/trades` returns the complete in-memory collection without a database read.
-- A successfully loaded empty database returns `{ items: [] }` unless optional seed-on-empty behavior populates it.
+- Once ready, `GET /api/v1/trades` filters, sorts, counts, and pages the in-memory collection without a database read.
+- A successfully loaded empty database returns `{ items: [], pagination: { page: 1, pageSize, totalItems: 0, pageCount: 0 } }` unless optional seed-on-empty behavior populates it.
+- Cache-backed list results reflect writes made through this backend process; direct database writes and writes through other instances appear after cache rehydration.
 - Database or hydration failure prevents the service from reporting ready; it retries according to the startup policy or exits for the container restart policy.
 
 ### 3. Check backend readiness
@@ -125,10 +126,10 @@ As a connected blotter user, I want other users' committed trade changes pushed 
 - The event publisher runs only after a successful database mutation and cache update.
 - A disconnected client is removed from active subscribers and can reconnect.
 - Events are process-local and not durable. After reconnect, the client reloads `GET /api/v1/trades` to reconcile missed events.
-- The client opens the event stream before fetching its initial snapshot and reconciles events received during that fetch, avoiding a snapshot/subscribe gap.
+- The client opens the event stream before fetching its initial page. Valid events received during a request trigger a follow-up refresh of the active query, avoiding a snapshot/subscribe gap.
 - SSE delivery errors do not roll back committed data or change the successful REST response.
 
-**Implementation:** `GET /api/v1/events` streams canonical `trade.created`, `trade.amended`, and `trade.cancelled` events. Each browser connection owns one EventSource and is removed from the publisher when the response closes. The frontend waits for the stream to open before fetching `GET /api/v1/trades`, buffers events while each snapshot is in flight, and applies those events over the returned collection. EventSource reconnects automatically; every reconnection triggers a fresh collection fetch to recover changes missed while disconnected. Event delivery failures are isolated from successful REST mutations. Event IDs, durable replay, and multi-instance fan-out are not implemented.
+**Implementation:** `GET /api/v1/events` streams canonical `trade.created`, `trade.amended`, and `trade.cancelled` events. Each browser connection owns one EventSource and is removed from the publisher when the response closes. The frontend opens the stream before fetching the initial page; valid events trigger a refetch of the active server query rather than an upsert into a partial page. EventSource reconnects automatically; each reconnection triggers a fresh query to recover changes missed while disconnected. Event delivery failures are isolated from successful REST mutations. Event IDs, durable replay, and multi-instance fan-out are not implemented.
 
 ### 8. Explore the API contract
 
@@ -143,9 +144,11 @@ As an interviewer or frontend developer, I want a browsable API contract so I ca
 - The specification is updated alongside API changes and does not present planned endpoints as implemented.
 - The SSE endpoint documents its `text/event-stream` response, event names, payload shape, and reconnect expectations. Any SSE details not represented clearly by the chosen OpenAPI tooling are documented alongside the specification.
 
-**Implementation:** Swagger UI is served at `/api-docs` (redirecting to `/api-docs/`) on the backend's existing port, with the generated specification at `/api-docs/openapi.yaml`. The specification describes implemented liveness, collection, creation, amendment/cancellation, and SSE behavior, request/response schemas, error statuses, and request-ID headers. The PATCH request documents amendment fields and the strict cancellation command, and explicitly disallows returning a cancelled trade to `ACTIVE`. The SSE operation documents the `trade.created`, `trade.amended`, and `trade.cancelled` payloads and wire examples, retry interval, lack of durable replay, and client recovery expectations. Client reconciliation remains unimplemented; Swagger UI is not an SSE event viewer.
+**Implementation:** Swagger UI is served at `/api-docs` (redirecting to `/api-docs/`) on the backend's existing port, with the generated specification at `/api-docs/openapi.yaml`. The specification describes implemented liveness, collection, creation, amendment/cancellation, and SSE behavior, request/response schemas, error statuses, and request-ID headers. The PATCH request documents amendment fields and the strict cancellation command, and explicitly disallows returning a cancelled trade to `ACTIVE`. The SSE operation documents the `trade.created`, `trade.amended`, and `trade.cancelled` payloads and wire examples, retry interval, lack of durable replay, and client recovery expectations. The frontend refetches the active server query after valid events and reconnects; Swagger UI is not an SSE event viewer.
 
 ### 9. Review the backend architecture
+
+**Status:** Proposed. The architecture diagram has not been created yet.
 
 As an interviewer, I want a concise architecture diagram so I can understand the backend components and data flow without inferring them from source code.
 
@@ -162,4 +165,4 @@ As an interviewer, I want a concise architecture diagram so I can understand the
 - Controllers own HTTP parsing and response mapping; services own use cases and domain rules; repositories own database access; the cache and event publisher are infrastructure components behind clear interfaces.
 - All cache and event changes use the canonical trade returned by persistence, not the untrusted request body.
 - Tests cover validation failures, unknown IDs, persistence failures, cache hydration, mutation ordering, event publication, SSE disconnect/reconnect, and concurrent amendments if optimistic locking is selected.
-- Multi-instance fan-out, durable event replay, authentication, and pagination are outside the initial scope unless requirements change.
+- Multi-instance fan-out, durable event replay, and authentication are outside the initial scope unless requirements change.

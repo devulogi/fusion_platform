@@ -7,9 +7,9 @@ import type {
   createTradeInputSchema,
   healthResponseSchema,
   readinessResponseSchema,
+  tradeCollectionQuerySchema,
   tradeCollectionResponseSchema,
   tradeIdSchema,
-  tradeNotFoundResourceSchema,
   tradeResponseSchema,
 } from './schemas.ts';
 import type { TradeEventType, TRADE_SIDE, TRADE_STATUS } from './constants.ts';
@@ -42,7 +42,8 @@ export type AmendTradeInput = z.infer<typeof amendTradeInputSchema>;
 export type CancelTradeInput = z.infer<typeof cancelTradeInputSchema>;
 export type TradeResponse = z.infer<typeof tradeResponseSchema>;
 export type TradeCollectionResponse = z.infer<typeof tradeCollectionResponseSchema>;
-export type TradeNotFound = z.infer<typeof tradeNotFoundResourceSchema>;
+export type TradeCollectionQuery = z.infer<typeof tradeCollectionQuerySchema>;
+export type TradeCollectionPagination = TradeCollectionResponse['pagination'];
 export type ApiErrorDetail = z.infer<typeof apiErrorDetailSchema>;
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export type ReadinessResponse = z.infer<typeof readinessResponseSchema>;
@@ -58,6 +59,16 @@ export type Trade = {
   readonly status: TradeStatus;
   readonly book?: string;
   readonly counterparty?: string;
+};
+
+export type TradePage = {
+  readonly items: Trade[];
+  readonly pagination: TradeCollectionPagination;
+};
+
+export type TradePageData = {
+  readonly items: Trade[];
+  readonly totalItems: number;
 };
 
 export type TradeChangedEvent = {

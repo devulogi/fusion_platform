@@ -1,4 +1,9 @@
-import type { Trade, TradeCollectionResponse, TradeResponse } from '../../types.ts';
+import type {
+  Trade,
+  TradeCollectionPagination,
+  TradeCollectionResponse,
+  TradeResponse,
+} from '../../types.ts';
 import { tradeCollectionResponseSchema, tradeResponseSchema } from '../../schemas.ts';
 
 export function serializeTrade(trade: Trade): TradeResponse {
@@ -16,9 +21,13 @@ export function serializeTrade(trade: Trade): TradeResponse {
   });
 }
 
-export function serializeTradeCollection(trades: readonly Trade[]): TradeCollectionResponse {
+export function serializeTradeCollection(
+  trades: readonly Trade[],
+  pagination: TradeCollectionPagination,
+): TradeCollectionResponse {
   const items = trades.map(serializeTrade);
   return tradeCollectionResponseSchema.parse({
     items,
+    pagination,
   });
 }

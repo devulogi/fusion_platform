@@ -1,0 +1,1 @@
+DROP INDEX "Trade_tradeTimestamp_idx";

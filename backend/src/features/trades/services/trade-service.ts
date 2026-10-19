@@ -1,5 +1,4 @@
 import { TradeCache } from '../trade-cache.ts';
-import { TradeNotFoundError } from '../../../errors.ts';
 import type {
   AmendTradeInput,
   CreateTradeInput,
@@ -7,10 +6,13 @@ import type {
   TradeRepositoryContract,
 } from '../../../types.ts';
 import { TradeEventPublisher } from '../trade-event-publisher.ts';
+import type { TradeCollectionQuery, TradePage } from '../../../types.ts';
+import { queryCachedTrades } from '../trade-query.ts';
 import {
   parseAmendTradeInput,
   parseCancelTradeInput,
   parseCreateTradeInput,
+  parseTradeCollectionQuery,
   parseTradeId,
 } from '../trade-input.ts';
 
@@ -24,18 +26,21 @@ export class TradeService {
     >,
   ) {}
 
-  getAllTrades(): readonly Trade[] {
-    return this.tradeCache.getAll();
-  }
-
-  getTradeById(id: unknown): Trade {
-    const validatedId = parseTradeId(id);
+  getTradePage(input: unknown): TradePage {
+    const query: TradeCollectionQuery = parseTradeCollectionQuery(input);
     this.tradeCache.assertHydrated();
-    const trade = this.tradeCache.getById(validatedId);
-    if (!trade) {
-      throw new TradeNotFoundError(validatedId);
-    }
-    return trade;
+    const { items, totalItems } = queryCachedTrades(this.tradeCache.getAll(), query);
+    const pageCount = totalItems === 0 ? 0 : Math.ceil(totalItems / query.pageSize);
+
+    return {
+      items,
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        totalItems,
+        pageCount,
+      },
+    };
   }
 
   async createTrade(input: CreateTradeInput): Promise<Trade> {
