@@ -338,4 +338,4 @@ GitHub Copilot Chat in Visual Studio Code was used as a development aid for targ
 
 ### Decisions Influenced by AI
 
-Copilot helped compare implementation options and identify trade-offs. The project author defined the requirements and scope, selected the application boundaries, and made the key design decisions, including numbered pagination and cache-backed reads. Copilot helped carry out those approved decisions; it did not choose or accept them autonomously.
+Copilot helped compare implementation options and identify trade-offs. AI assistance defined the requirements and scope, selected the application boundaries, and design decisions. Copilot helped carry out those approved decisions; it did not choose or accept them autonomously.
