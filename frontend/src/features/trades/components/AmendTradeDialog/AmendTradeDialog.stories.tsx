@@ -18,6 +18,10 @@ const trade: Trade = {
 const meta = {
   title: 'Trade History/AmendTradeDialog',
   component: AmendTradeDialog,
+  parameters: {
+    layout: 'fullscreen',
+    docs: { story: { inline: false, iframeHeight: '640px' } },
+  },
   args: {
     open: true,
     trade,

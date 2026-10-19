@@ -7,22 +7,18 @@ import {
   parseAmendTradeInput,
   parseCancelTradeInput,
   parseCreateTradeInput,
+  parseTradeCollectionQuery,
   parseTradeId,
 } from '../trade-input.ts';
 
 export class TradeController {
   constructor(private readonly tradeService: TradeService) {}
 
-  readonly getAll: RequestHandler = (_request, response) => {
-    const trades = this.tradeService.getAllTrades();
-    response.status(HttpStatus.OK).json(serializeTradeCollection(trades));
-  };
-
-  readonly getById: RequestHandler = (request, response, next) => {
+  readonly getAll: RequestHandler = (request, response, next) => {
     try {
-      const tradeId = parseTradeId(request.params.tradeId);
-      const trade = this.tradeService.getTradeById(tradeId);
-      response.status(HttpStatus.OK).json(serializeTrade(trade));
+      const query = parseTradeCollectionQuery(request.query);
+      const page = this.tradeService.getTradePage(query);
+      response.status(HttpStatus.OK).json(serializeTradeCollection(page.items, page.pagination));
     } catch (error: unknown) {
       next(error);
     }

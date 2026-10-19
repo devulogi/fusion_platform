@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TradeBlotterTable from './index';
 import type { Trade } from '../../trade-schema';
+import type { ComponentProps } from 'react';
 
 afterEach(cleanup);
 
@@ -18,15 +19,36 @@ const sampleTrade = {
   counterparty: 'Goldman Sachs',
 };
 
-function renderTable(trades: Trade[], isLoading: boolean, emptyMessage: string) {
+function renderTable(
+  trades: Trade[],
+  isLoading: boolean,
+  emptyMessage: string,
+  overrides: Partial<ComponentProps<typeof TradeBlotterTable>> = {},
+) {
   return render(
     <TradeBlotterTable
       actionsDisabled={false}
       emptyMessage={emptyMessage}
       isLoading={isLoading}
+      symbol=""
+      filters={{ trader: '', startDate: '', endDate: '', sides: [], statuses: [] }}
+      activeFilterCount={0}
+      sortBy="tradeTimestamp"
+      sortDirection="desc"
+      pagination={{
+        page: 1,
+        pageSize: 100,
+        totalItems: trades.length,
+        pageCount: trades.length ? 1 : 0,
+      }}
+      onPageChange={vi.fn()}
+      onSymbolChange={vi.fn()}
+      onFiltersApply={vi.fn()}
+      onSortChange={vi.fn()}
       onAmend={vi.fn()}
       onCancel={vi.fn()}
       trades={trades}
+      {...overrides}
     />,
   );
 }
@@ -57,6 +79,22 @@ describe('TradeBlotterTable', () => {
       within(table).queryByRole('columnheader', { name: /Trade ID|Trader|Book|Counterparty/ }),
     ).not.toBeInTheDocument();
     expect(within(row).queryByText('TRD-100001')).not.toBeInTheDocument();
+  });
+
+  it('distinguishes BUY and SELL with side colors while keeping trader secondary', () => {
+    renderTable(
+      [sampleTrade, { ...sampleTrade, id: 'TRD-100002', symbol: 'MSFT', side: 'SELL' }],
+      false,
+      'No trades',
+    );
+
+    const table = screen.getByRole('table', { name: 'Trade blotter' });
+    const buyRow = within(table).getByRole('row', { name: /AAPL/ });
+    const sellRow = within(table).getByRole('row', { name: /MSFT/ });
+
+    expect(within(buyRow).getByText('· BUY')).toHaveClass('text-[var(--trade-active-text)]');
+    expect(within(sellRow).getByText('· SELL')).toHaveClass('text-[var(--trade-cancelled-text)]');
+    expect(within(buyRow).getByText('JSMITH')).toHaveClass('text-[var(--trade-muted)]');
   });
 
   it('does not show selection controls without a bulk action', () => {
@@ -104,72 +142,62 @@ describe('TradeBlotterTable', () => {
     expect(screen.getByRole('status')).toHaveTextContent('No trades yet');
   });
 
-  it('shows at most 100 trades per page and navigates through filtered rows', () => {
-    const trades = Array.from({ length: 205 }, (_, index) => ({
+  it('renders the supplied page and cursor navigation controls', () => {
+    const trades = Array.from({ length: 5 }, (_, index) => ({
       ...sampleTrade,
       id: `TRD-${index}`,
       symbol: `SYM${String(index).padStart(3, '0')}`,
     }));
-    renderTable(trades, false, 'No trades');
+    render(
+      <TradeBlotterTable
+        actionsDisabled={false}
+        emptyMessage="No trades"
+        isLoading={false}
+        symbol=""
+        filters={{ trader: '', startDate: '', endDate: '', sides: [], statuses: [] }}
+        activeFilterCount={0}
+        sortBy="tradeTimestamp"
+        sortDirection="desc"
+        pagination={{ page: 1, pageSize: 100, totalItems: 245, pageCount: 3 }}
+        onPageChange={vi.fn()}
+        onSymbolChange={vi.fn()}
+        onFiltersApply={vi.fn()}
+        onSortChange={vi.fn()}
+        onAmend={vi.fn()}
+        onCancel={vi.fn()}
+        trades={trades}
+      />,
+    );
 
     const table = screen.getByRole('table', { name: 'Trade blotter' });
-    expect(within(table).getAllByRole('row')).toHaveLength(101);
-    expect(screen.getByText('Showing 1-100 of 205 trades')).toBeInTheDocument();
+    expect(within(table).getAllByRole('row')).toHaveLength(6);
     expect(within(table).getByRole('row', { name: /SYM000/ })).toBeInTheDocument();
-    expect(within(table).queryByRole('row', { name: /SYM100/ })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
-    expect(screen.getByText('Showing 101-200 of 205 trades')).toBeInTheDocument();
-    expect(within(table).getByRole('row', { name: /SYM100/ })).toBeInTheDocument();
-    expect(within(table).queryByRole('row', { name: /SYM000/ })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
-    expect(screen.getByText('Showing 201-205 of 205 trades')).toBeInTheDocument();
-    expect(within(table).getByRole('row', { name: /SYM204/ })).toBeInTheDocument();
+    expect(within(table).getByRole('row', { name: /SYM004/ })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Trade pages' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Page 2' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
   });
 
-  it('returns to the first page when a filter is changed', () => {
-    const trades = Array.from({ length: 205 }, (_, index) => ({
-      ...sampleTrade,
-      id: `TRD-${index}`,
-      symbol: `SYM${String(index).padStart(3, '0')}`,
-    }));
-    renderTable(trades, false, 'No trades');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter by symbol' }), {
-      target: { value: 'SYM204' },
-    });
-
-    expect(screen.getByText('Showing 1-1 of 1 trade')).toBeInTheDocument();
-    expect(screen.getByRole('row', { name: /SYM204/ })).toBeInTheDocument();
-  });
-
-  it('sorts trades by the composite Trade column', () => {
+  it('requests a server sort when a column header is selected', () => {
+    const onSortChange = vi.fn();
     renderTable(
       [{ ...sampleTrade, id: 'trade-msft', symbol: 'MSFT' }, sampleTrade],
       false,
       'No trades',
+      { onSortChange },
     );
 
-    const table = screen.getByRole('table', { name: 'Trade blotter' });
     const tradeHeader = screen.getByRole('columnheader', { name: /Trade/ });
     fireEvent.click(within(tradeHeader).getByRole('button', { name: 'Sort by Trade' }));
 
-    const rows = within(table).getAllByRole('row').slice(1);
-    expect(within(rows[0]).getByText('AAPL')).toBeInTheDocument();
-    expect(tradeHeader).toHaveAttribute('aria-sort', 'ascending');
+    expect(onSortChange).toHaveBeenCalledWith('symbol', 'asc');
   });
 
-  it('filters by symbol, trader, and status and resets filters', () => {
-    const secondTrade = {
-      ...sampleTrade,
-      id: 'TRD-100002',
-      symbol: 'MSFT',
-      trader: 'ABROWN',
-      status: 'CANCELLED' as const,
-    };
-    renderTable([sampleTrade, secondTrade], false, 'No trades');
+  it('sends symbol changes and applied advanced filters to the server owner', () => {
+    const onSymbolChange = vi.fn();
+    const onFiltersApply = vi.fn();
+    renderTable([sampleTrade], false, 'No trades', { onSymbolChange, onFiltersApply });
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Filter by symbol' }), {
       target: { value: 'AAPL' },
@@ -178,59 +206,19 @@ describe('TradeBlotterTable', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Trader' }), {
       target: { value: 'JSMITH' },
     });
+    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2026-09-01' } });
+    fireEvent.change(screen.getByLabelText('End date'), { target: { value: '2026-09-30' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Sell' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Active' }));
     fireEvent.click(screen.getByRole('button', { name: 'Apply Filters' }));
 
-    expect(screen.getByRole('row', { name: /AAPL/ })).toBeInTheDocument();
-    expect(screen.queryByRole('row', { name: /MSFT/ })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /Filters/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Reset all' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Apply Filters' }));
-
-    expect(screen.getByRole('row', { name: /AAPL/ })).toBeInTheDocument();
-    expect(screen.getByRole('row', { name: /MSFT/ })).toBeInTheDocument();
-  });
-
-  it('filters rows by trader without relying on another active filter', () => {
-    const secondTrade = {
-      ...sampleTrade,
-      id: 'TRD-100002',
-      trader: 'ABROWN',
-    };
-    renderTable([sampleTrade, secondTrade], false, 'No trades');
-
-    fireEvent.click(screen.getByRole('button', { name: /Filters/ }));
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Trader' }), {
-      target: { value: 'JSMITH' },
+    expect(onSymbolChange).toHaveBeenCalledWith('AAPL');
+    expect(onFiltersApply).toHaveBeenCalledWith({
+      trader: 'JSMITH',
+      startDate: '2026-09-01',
+      endDate: '2026-09-30',
+      sides: ['SELL'],
+      statuses: ['ACTIVE'],
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Apply Filters' }));
-
-    expect(screen.getByRole('row', { name: /AAPL/ })).toBeInTheDocument();
-    expect(screen.queryByRole('row', { name: /MSFT/ })).not.toBeInTheDocument();
-  });
-
-  it('filters by side and inclusive date range', () => {
-    const secondTrade = {
-      ...sampleTrade,
-      id: 'TRD-100002',
-      symbol: 'MSFT',
-      side: 'SELL' as const,
-      tradeTimestamp: '2026-09-20T12:00:00Z',
-    };
-    renderTable([sampleTrade, secondTrade], false, 'No trades');
-
-    fireEvent.click(screen.getByRole('button', { name: /Filters/ }));
-    fireEvent.change(screen.getByLabelText('Start date'), {
-      target: { value: '2026-09-01' },
-    });
-    fireEvent.change(screen.getByLabelText('End date'), {
-      target: { value: '2026-09-30' },
-    });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Sell' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Apply Filters' }));
-
-    expect(screen.getByRole('row', { name: /MSFT/ })).toBeInTheDocument();
-    expect(screen.queryByRole('row', { name: /AAPL/ })).not.toBeInTheDocument();
   });
 });

@@ -6,7 +6,6 @@ import type { TradeController } from '../controllers/trade-controller.ts';
 export function tradeRouter(controller: TradeController): Router {
   const router = Router();
   router.get('/', recordRequestRoute(ApiPath.trades), controller.getAll);
-  router.get('/:tradeId', recordRequestRoute(`${ApiPath.trades}/:tradeId`), controller.getById);
   router.post('/', recordRequestRoute(ApiPath.trades), json(), controller.create);
   router.patch(
     '/:tradeId',

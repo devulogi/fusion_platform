@@ -2,7 +2,7 @@
 name: Frontend Feature Engineer
 description: Use when implementing or reviewing an approved Fusion Platform frontend story or user workflow, including trade blotter, create/amend/cancel, and live-update flows.
 argument-hint: Name the frontend workflow and its acceptance criteria.
-tools: [read, search, edit, execute, browser, agent]
+tools: [read, search, edit, execute, browser, agent, agent/runSubagent]
 user-invocable: true
 ---
 

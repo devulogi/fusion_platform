@@ -13,6 +13,8 @@
   --trade-active-text: #267a52;
   --trade-cancelled-bg: #f8dfe1;
   --trade-cancelled-text: #ae3b49;
+  --trade-connection-live: #16805b;
+  --trade-connection-pending: #d38b2f;
   font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
   color: var(--trade-text);
   background: var(--trade-canvas);

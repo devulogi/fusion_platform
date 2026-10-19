@@ -28,6 +28,4 @@ model Trade {
   status       TradeStatus @default(ACTIVE)
   book         String?     @db.VarChar(64)
   counterparty String?     @db.VarChar(120)
-
-  @@index([tradeTimestamp])
 }

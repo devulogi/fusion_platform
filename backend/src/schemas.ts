@@ -1,5 +1,15 @@
 import { z } from './openapi/zod.ts';
-import { ApiErrorCode, ApiErrorMessage, TRADE_SIDE, TRADE_STATUS } from './constants.ts';
+import {
+  ApiErrorCode,
+  ApiErrorMessage,
+  DEFAULT_TRADE_SORT_BY,
+  DEFAULT_TRADE_SORT_DIRECTION,
+  DEFAULT_TRADE_PAGE_SIZE,
+  MAX_TRADE_PAGE_SIZE,
+  TRADE_SIDE,
+  TRADE_SORT_FIELDS,
+  TRADE_STATUS,
+} from './constants.ts';
 
 export const createTradeInputSchema = z
   .object({
@@ -46,15 +56,74 @@ export const tradeResponseSchema = z
   })
   .openapi('Trade');
 
-export const tradeNotFoundResourceSchema = z
-  .object({ message: z.string() })
-  .strict()
-  .openapi('TradeNotFound');
-
 export const tradeCollectionResponseSchema = z
-  .object({ items: z.array(tradeResponseSchema) })
+  .object({
+    items: z.array(tradeResponseSchema),
+    pagination: z
+      .object({
+        page: z.number().int().positive(),
+        pageSize: z.number().int().positive().max(MAX_TRADE_PAGE_SIZE),
+        totalItems: z.number().int().nonnegative(),
+        pageCount: z.number().int().nonnegative(),
+      })
+      .strict(),
+  })
   .strict()
   .openapi('TradeCollectionResponse');
+
+const sideQuerySchema = z
+  .union([
+    z.enum([TRADE_SIDE.BUY, TRADE_SIDE.SELL]),
+    z.array(z.enum([TRADE_SIDE.BUY, TRADE_SIDE.SELL])).min(1),
+  ])
+  .transform((value) => (typeof value === 'string' ? [value] : value));
+const statusQuerySchema = z
+  .union([
+    z.enum([TRADE_STATUS.ACTIVE, TRADE_STATUS.CANCELLED]),
+    z.array(z.enum([TRADE_STATUS.ACTIVE, TRADE_STATUS.CANCELLED])).min(1),
+  ])
+  .transform((value) => (typeof value === 'string' ? [value] : value));
+
+export const tradeCollectionQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).max(Number.MAX_SAFE_INTEGER).default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_TRADE_PAGE_SIZE)
+      .default(DEFAULT_TRADE_PAGE_SIZE),
+    sortBy: z.enum(TRADE_SORT_FIELDS).default(DEFAULT_TRADE_SORT_BY),
+    sortDirection: z.enum(['asc', 'desc']).default(DEFAULT_TRADE_SORT_DIRECTION),
+    symbol: z.string().trim().min(1).max(16).optional(),
+    trader: z.string().trim().min(1).max(32).optional(),
+    side: sideQuerySchema.optional(),
+    status: statusQuerySchema.optional(),
+    startDate: z.string().datetime({ offset: true }).optional(),
+    endDate: z.string().datetime({ offset: true }).optional(),
+  })
+  .strict()
+  .superRefine((query, context) => {
+    if (!Number.isSafeInteger((query.page - 1) * query.pageSize)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['page'],
+        message: 'Page is too large.',
+      });
+    }
+    if (
+      query.startDate !== undefined &&
+      query.endDate !== undefined &&
+      Date.parse(query.startDate) > Date.parse(query.endDate)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endDate'],
+        message: 'End date must be on or after start date.',
+      });
+    }
+  })
+  .openapi('TradeCollectionQuery');
 
 export const healthResponseSchema = z.object({ status: z.literal('ok') }).openapi('HealthResponse');
 

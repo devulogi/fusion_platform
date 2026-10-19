@@ -2,7 +2,6 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 setup_database() {
     workspace_container="$(docker compose ps -q workspace)"
@@ -46,9 +45,6 @@ for project in backend frontend; do
 
     npm install
 done
-
-bash "$script_dir/prettier-setup.sh"
-bash "$script_dir/eslint-setup.sh"
 
 cd "$repo_root"
 npm install
